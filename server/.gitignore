@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.env
+*.sqlite3
+
+# Virtual environment
+venv/
+env/
+ENV/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+*.out
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Pytest / coverage
+.coverage
+htmlcov/
+*.cover
