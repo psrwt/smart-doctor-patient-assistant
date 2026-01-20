@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.db.database import engine
 from app.db import models
 from app.routes import auth
+from app.routes import chat
 
 from fastapi import APIRouter, Depends
 from app.services.dependencies import get_current_user, require_role
@@ -29,6 +30,7 @@ def startup_db():
     models.Base.metadata.create_all(bind=engine)
 
 app.include_router(auth.router)
+app.include_router(chat.router)
 
 # Protected router
 router = APIRouter(tags=["Protected"])

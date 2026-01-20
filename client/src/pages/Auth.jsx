@@ -10,7 +10,6 @@ export default function Auth() {
     const navigate = useNavigate();
 
     useEffect(() => {
-        console.log("mujhe protect kar raha hu")
         if (user) {
             if (user.user_role === "doctor") navigate("/doctor");
             else navigate("/patient");
