@@ -15,7 +15,7 @@ class SignupRequest(BaseModel):
     full_name: str
     email: EmailStr
     password: str
-    role: UserRole
+    role: str
 
 
 class LoginRequest(BaseModel):
@@ -26,7 +26,11 @@ class LoginRequest(BaseModel):
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
-    user_role: UserRole
+    user_role: str
+    user_name: str
+    user_email: str
+    user_id: str
+
 
     
 
@@ -37,7 +41,7 @@ def signup(payload: SignupRequest, db: Session = Depends(get_db)):
         full_name=payload.full_name,
         email=payload.email,
         password=payload.password,
-        role=payload.role,
+        role=UserRole(payload.role),
     )
 
     if not user:
@@ -53,7 +57,10 @@ def signup(payload: SignupRequest, db: Session = Depends(get_db)):
     return {
         "message": "Account created successfully",
         "access_token": token,
-        "user_role": user.role,
+        "user_role": user.role.value,
+        "user_name": user.full_name,
+        "user_email": user.email,
+        "user_id": str(user.id),
     }
 
 
@@ -73,5 +80,8 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
 
     return {
         "access_token": token,
-        "user_role": user.role,
+        "user_role": user.role.value,
+        "user_name": user.full_name,
+        "user_email": user.email,
+        "user_id": str(user.id),
     }

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
 
@@ -11,6 +12,8 @@ export default function SignupForm() {
     const [password, setPassword] = useState("");
     const [role, setRole] = useState("patient");
     const [loading, setLoading] = useState(false);
+
+    const {login} = useAuth();
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -25,12 +28,11 @@ export default function SignupForm() {
                 role,
             });
 
-            const { access_token, user_role } = res.data;
+            const { access_token, user_role, user_name, user_email, user_id } = res.data;
 
-            localStorage.setItem("token", access_token);
-            localStorage.setItem("role", user_role);
+            login({ user_name, user_email, user_id, user_role }, access_token);
 
-            alert("Account created. Please login.");
+            alert("Account created successfully");
 
             if (user_role === "doctor") navigate("/doctor"); else navigate("/patient");
 

@@ -1,9 +1,21 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import LoginForm from "../components/LoginForm";
 import SignupForm from "../components/SignupForm";
+import { useAuth } from "../context/AuthContext";
+import { useNavigate } from "react-router-dom";
 
 export default function Auth() {
     const [mode, setMode] = useState("login");
+    const {user} = useAuth();
+    const navigate = useNavigate();
+
+    useEffect(() => {
+        console.log("mujhe protect kar raha hu")
+        if (user) {
+            if (user.user_role === "doctor") navigate("/doctor");
+            else navigate("/patient");
+        }
+    }, [user, navigate]);
 
     return (
         <div className="min-h-screen flex items-center justify-center bg-linear-to-br from-blue-50 to-indigo-100 px-4">

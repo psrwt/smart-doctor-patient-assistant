@@ -1,6 +1,7 @@
 import { useState } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
 
@@ -8,6 +9,8 @@ export default function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+
+  const {login} = useAuth();
 
   const navigate = useNavigate();
 
@@ -22,10 +25,9 @@ export default function LoginForm() {
         password,
       });
 
-      const { access_token, user_role } = res.data;
+      const { access_token, user_role, user_name, user_email, user_id } = res.data;
 
-      localStorage.setItem("token", access_token);
-      localStorage.setItem("role", user_role);
+      login({ user_name, user_email, user_id, user_role }, access_token);
 
       alert("Login successful");
 

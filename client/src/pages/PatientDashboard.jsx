@@ -1,10 +1,13 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 
+import { useAuth } from "../context/AuthContext";
+
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
 
 export default function PatientDashboard() {
   const [message, setMessage] = useState("");
+  const {logout} = useAuth();
   const token = localStorage.getItem("token");
 
   useEffect(() => {
@@ -23,8 +26,7 @@ export default function PatientDashboard() {
   }, [token]);
 
   const handleLogout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("role");
+    logout();
     window.location.href = "/auth";
   };
 
