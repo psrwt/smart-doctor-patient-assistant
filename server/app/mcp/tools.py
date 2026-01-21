@@ -1,50 +1,315 @@
+# # app/mcp/tools.py
+# from sqlalchemy.orm import Session
+# from app.db.models import User, UserRole, Appointment, AppointmentStatus
+# from datetime import datetime
+# from sqlalchemy.exc import SQLAlchemyError
+# import uuid
+# import os
+# from dotenv import load_dotenv
+# from googleapiclient.discovery import build
+# from google.oauth2 import service_account
+
+# from app.services.email_service import send_appointment_confirmation_email
+
+# load_dotenv()
+
+# # === GOOGLE CALENDAR SETUP ===
+# SERVICE_ACCOUNT_FILE = os.getenv("GOOGLE_SERVICE_ACCOUNT_FILE")
+# DEFAULT_CALENDAR_ID = os.getenv("GOOGLE_CALENDAR_ID")  # fallback calendar
+# SCOPES = ["https://www.googleapis.com/auth/calendar"]
+
+# if not SERVICE_ACCOUNT_FILE:
+#     raise ValueError("Missing GOOGLE_SERVICE_ACCOUNT_JSON environment variable")
+# if not DEFAULT_CALENDAR_ID:
+#     raise ValueError("Missing GOOGLE_CALENDAR_ID environment variable")
+
+
+# # === DATABASE HELPERS ===
+# def fetch_doctors_from_db(db: Session):
+#     rows = db.query(User.full_name).filter(User.role == UserRole.doctor).all()
+#     return [{"name": r.full_name} for r in rows]
+
+
+# def fetch_doctor_availability(db: Session, doctor_name: str):
+#     doctor = (
+#         db.query(User)
+#         .filter(User.full_name == doctor_name, User.role == "doctor")
+#         .first()
+#     )
+#     if not doctor:
+#         return f"No doctor found with the name '{doctor_name}'."
+
+#     now = datetime.utcnow()
+#     appointments = (
+#         db.query(Appointment)
+#         .filter(    #filter future booked appointements for a doctor
+#             Appointment.doctor_id == doctor.id,
+#             Appointment.appointment_date >= now,
+#             Appointment.status == "booked",
+#         )
+#         .order_by(Appointment.appointment_date, Appointment.start_time)
+#         .all()
+#     )
+
+#     if not appointments:
+#         return f"No future appointments found for Dr. {doctor_name}. So, we can schedule an appointment."
+
+#     return [
+#         {
+#             "appointment_date": appt.appointment_date.strftime("%Y-%m-%d"),
+#             "start_time": appt.start_time.strftime("%H:%M"),
+#             "end_time": appt.end_time.strftime("%H:%M"),
+#             "status": appt.status,
+#         }
+#         for appt in appointments
+#     ]
+
+
+# def make_appointment(
+#     db: Session,
+#     doctor_name: str,
+#     patient_id: str,
+#     appointment_date: str,
+#     start_time: str,
+#     end_time: str,
+# ):
+#     """
+#     Make an appointment in the database.
+#     """
+#     print(
+#         f"DEBUG: make_appointment received: date='{appointment_date}', start='{start_time}', end='{end_time}'"
+#     )
+#     doctor = (
+#         db.query(User)
+#         .filter(User.full_name == doctor_name, User.role == "doctor")
+#         .first()
+#     )
+#     if not doctor:
+#         return f"No doctor found with the name '{doctor_name}'."
+
+#     # Support multiple time formats
+#     time_formats = ["%H:%M", "%H:%M:%S", "%I:%M %p", "%I:%M%p"]
+#     start_dt = None
+#     end_dt = None
+
+#     for fmt in time_formats:
+#         try:
+#             start_dt = datetime.strptime(
+#                 f"{appointment_date} {start_time}", f"%Y-%m-%d {fmt}"
+#             )
+#             end_dt = datetime.strptime(
+#                 f"{appointment_date} {end_time}", f"%Y-%m-%d {fmt}"
+#             )
+#             break
+#         except ValueError:
+#             continue
+
+#     if not start_dt or not end_dt:
+#         return f"Invalid date/time format. Use YYYY-MM-DD for date ({appointment_date}) and HH:MM or HH:MM:SS for time (received start: {start_time}, end: {end_time})."
+
+#     if start_dt <= end_dt:
+#         return "Start time must be before end time."
+
+#     # conflict = (
+#     #     db.query(Appointment)
+#     #     .filter(
+#     #         Appointment.doctor_id == doctor.id,
+#     #         Appointment.appointment_date == start_dt.date(),
+#     #         Appointment.status == "booked",
+#     #         ((Appointment.start_time < end_dt) & (Appointment.end_time > start_dt)),
+#     #     )
+#     #     .first()
+#     # )
+#     # if conflict:
+#     #     return "This doctor already has an appointment in this time slot. Please choose another time."
+
+#     new_appt = Appointment(
+#         id=uuid.uuid4(),
+#         doctor_id=doctor.id,
+#         patient_id=patient_id,
+#         appointment_date=start_dt.date(),
+#         start_time=start_dt,
+#         end_time=end_dt,
+#         status=AppointmentStatus.booked,
+#     )
+
+#     try:
+#         db.add(new_appt)
+#         db.commit()
+#         db.refresh(new_appt)
+
+#         patient = db.query(User).filter(User.id == patient_id).first()
+#         send_appointment_confirmation_email(
+#             to_email=patient.email,
+#             patient_name=patient.full_name,
+#             doctor_name=doctor.full_name,
+#             appointment_date=start_dt.strftime("%d %b %Y"),
+#             start_time=start_dt.strftime("%I:%M %p"),
+#             end_time=end_dt.strftime("%I:%M %p"),
+#         )
+#     except SQLAlchemyError as e:
+#         db.rollback()
+#         return f"Failed to create appointment: {str(e)}"
+
+#     return f"Appointment successfully booked with Dr. {doctor.full_name} on {appointment_date} from {start_time} to {end_time}."
+
+
+# # === GOOGLE CALENDAR HELPER ===
+# def book_google_calendar_event(
+#     doctor_name: str,
+#     start_time: str,
+#     end_time: str,
+#     summary: str = "Doctor Appointment",
+# ):
+#     """
+#     Book an appointment in Google Calendar.
+#     start_time/end_time must be ISO 8601 "YYYY-MM-DDTHH:MM:SS"
+#     """
+#     try:
+#         start_dt = datetime.fromisoformat(start_time)
+#         end_dt = datetime.fromisoformat(end_time)
+#         if start_dt <= end_dt:
+#             return "Start time must be before end time"
+#     except ValueError:
+#         return (
+#             "start_time and end_time must be in ISO 8601 format 'YYYY-MM-DDTHH:MM:SS'"
+#         )
+
+#     try:
+#         credentials = service_account.Credentials.from_service_account_file(
+#             SERVICE_ACCOUNT_FILE, scopes=SCOPES
+#         )
+#         service = build("calendar", "v3", credentials=credentials)
+#         event = {
+#             "summary": summary,
+#             "start": {"dateTime": start_dt.isoformat(), "timeZone": "UTC"},
+#             "end": {"dateTime": end_dt.isoformat(), "timeZone": "UTC"},
+#         }
+#         created_event = (
+#             service.events()
+#             .insert(calendarId=DEFAULT_CALENDAR_ID, body=event)
+#             .execute()
+#         )
+#         return f"Google Calendar appointment booked"
+#     except Exception as e:
+#         return f"Failed to book appointment in Google Calendar: {str(e)}"
+
+
+
+# app/mcp/tools.py  (updated)
 from sqlalchemy.orm import Session
 from app.db.models import User, UserRole, Appointment, AppointmentStatus
-from datetime import datetime
+from datetime import datetime, date, time, timedelta
 from sqlalchemy.exc import SQLAlchemyError
 import uuid
+import os
+from dotenv import load_dotenv
+from googleapiclient.discovery import build
+from google.oauth2 import service_account
+from zoneinfo import ZoneInfo
+from typing import Optional
 
 from app.services.email_service import send_appointment_confirmation_email
 
+load_dotenv()
 
+# === CONFIG / TIMEZONE ===
+SERVICE_ACCOUNT_FILE = os.getenv("GOOGLE_SERVICE_ACCOUNT_FILE")
+DEFAULT_CALENDAR_ID = os.getenv("GOOGLE_CALENDAR_ID")
+SCOPES = ["https://www.googleapis.com/auth/calendar"]
+DEFAULT_TZ_NAME = os.getenv("DEFAULT_TIMEZONE", "Asia/Kolkata")
+DEFAULT_TZ = ZoneInfo(DEFAULT_TZ_NAME)
+UTC = ZoneInfo("UTC")
+
+if not SERVICE_ACCOUNT_FILE:
+    raise ValueError("Missing GOOGLE_SERVICE_ACCOUNT_JSON environment variable")
+if not DEFAULT_CALENDAR_ID:
+    raise ValueError("Missing GOOGLE_CALENDAR_ID environment variable")
+
+
+# === Helpers ===
+def _parse_date_time_to_local_and_utc(
+    appointment_date: str, time_str: str
+) -> Optional[tuple]:
+    """
+    Parse appointment_date (YYYY-MM-DD) and time_str (many formats) into:
+      (local_dt, utc_dt) both timezone-aware datetimes.
+    Returns None on failure.
+    """
+    # try several time formats
+    time_formats = ["%H:%M:%S", "%H:%M", "%I:%M %p", "%I %p", "%I:%M%p"]
+    for fmt in time_formats:
+        try:
+            naive = datetime.strptime(f"{appointment_date} {time_str}", f"%Y-%m-%d {fmt}")
+            # treat as local timezone
+            local_dt = naive.replace(tzinfo=DEFAULT_TZ)
+            utc_dt = local_dt.astimezone(UTC)
+            return local_dt, utc_dt
+        except ValueError:
+            continue
+    # attempt ISO-like parse
+    try:
+        iso = datetime.fromisoformat(f"{appointment_date}T{time_str}")
+        if iso.tzinfo is None:
+            iso_local = iso.replace(tzinfo=DEFAULT_TZ)
+        else:
+            iso_local = iso.astimezone(DEFAULT_TZ)
+        return iso_local, iso_local.astimezone(UTC)
+    except Exception:
+        return None
+
+
+def _parse_flexible_datetime(value: str) -> Optional[tuple]:
+    """
+    Parse a flexible datetime string (ISO or 'YYYY-MM-DD HH:MM' etc.)
+    Return (local_dt, utc_dt) timezone-aware.
+    """
+    try:
+        # try strict ISO first
+        dt = datetime.fromisoformat(value)
+        if dt.tzinfo is None:
+            dt_local = dt.replace(tzinfo=DEFAULT_TZ)
+        else:
+            dt_local = dt.astimezone(DEFAULT_TZ)
+        return dt_local, dt_local.astimezone(UTC)
+    except Exception:
+        # try common space-separated format
+        try:
+            parts = value.strip().split()
+            if len(parts) >= 2:
+                d = parts[0]
+                t = parts[1]
+                return _parse_date_time_to_local_and_utc(d, t)
+        except Exception:
+            return None
+    return None
+
+
+# === DATABASE HELPERS ===
 def fetch_doctors_from_db(db: Session):
     rows = db.query(User.full_name).filter(User.role == UserRole.doctor).all()
-
-    return [
-        {
-            "name": r.full_name,
-        }
-        for r in rows
-    ]
-
-
-def normalize_doctor_name(name: str):
-    import re
-
-    clean_name = re.sub(r"^Dr\.?\s*", "", name.strip())
-    return clean_name.title()  # Capitalizes first letters
+    return [{"name": r.full_name} for r in rows]
 
 
 def fetch_doctor_availability(db: Session, doctor_name: str):
-    clean_name = normalize_doctor_name(doctor_name)
-    # 1. Get doctor by name
     doctor = (
         db.query(User)
-        .filter(User.full_name == clean_name, User.role == "doctor")
+        .filter(User.full_name == doctor_name, User.role == UserRole.doctor)
         .first()
     )
-
     if not doctor:
         return f"No doctor found with the name '{doctor_name}'."
 
-    # 2. Fetch only future appointments slots with status "booked"
-    now = datetime.utcnow()
+    # compare by appointment_date (date) using local date
+    now_local = datetime.now(tz=DEFAULT_TZ)
+    today_local_date = now_local.date()
+
     appointments = (
         db.query(Appointment)
         .filter(
             Appointment.doctor_id == doctor.id,
-            Appointment.appointment_date >= now,  # future appointments
-            Appointment.status == "booked",
+            Appointment.appointment_date >= today_local_date,
+            Appointment.status == AppointmentStatus.booked,
         )
         .order_by(Appointment.appointment_date, Appointment.start_time)
         .all()
@@ -53,16 +318,23 @@ def fetch_doctor_availability(db: Session, doctor_name: str):
     if not appointments:
         return f"No future appointments found for Dr. {doctor_name}. So, we can schedule an appointment."
 
-    # 3. Return appointments in readable format
-    return [
-        {
-            "appointment_date": appt.appointment_date.strftime("%Y-%m-%d"),
-            "start_time": appt.start_time.strftime("%H:%M"),
-            "end_time": appt.end_time.strftime("%H:%M"),
-            "status": appt.status,
-        }
-        for appt in appointments
-    ]
+    out = []
+    for appt in appointments:
+        # stored start_time/end_time are UTC-aware datetimes in DB
+        start_utc = appt.start_time
+        end_utc = appt.end_time
+        # convert to local timezone for display
+        start_local = start_utc.astimezone(DEFAULT_TZ)
+        end_local = end_utc.astimezone(DEFAULT_TZ)
+        out.append(
+            {
+                "appointment_date": start_local.strftime("%Y-%m-%d"),
+                "start_time": start_local.strftime("%H:%M"),
+                "end_time": end_local.strftime("%H:%M"),
+                "status": appt.status.value if hasattr(appt.status, "value") else appt.status,
+            }
+        )
+    return out
 
 
 def make_appointment(
@@ -74,60 +346,59 @@ def make_appointment(
     end_time: str,
 ):
     """
-    Make an appointment with a doctor.
-    appointment_date: "YYYY-MM-DD"
-    start_time, end_time: "HH:MM"
+    Make an appointment in the database.
+    appointment_date: YYYY-MM-DD
+    start_time/end_time: flexible (HH:MM, 3:00 PM, HH:MM:SS, ISO etc.)
+    Stored times are normalized to UTC-aware datetimes.
     """
-
-    # 1. Normalize doctor name
-    clean_name = normalize_doctor_name(doctor_name)
-
-    # 2. Get doctor by name
+    print(
+        f"DEBUG: make_appointment received: date='{appointment_date}', start='{start_time}', end='{end_time}'"
+    )
     doctor = (
         db.query(User)
-        .filter(User.full_name == clean_name, User.role == "doctor")
+        .filter(User.full_name == doctor_name, User.role == UserRole.doctor)
         .first()
     )
     if not doctor:
         return f"No doctor found with the name '{doctor_name}'."
 
-    # 3. Parse appointment_date, start_time, end_time into datetime objects
-    try:
-        appt_date = datetime.strptime(appointment_date, "%Y-%m-%d").date()
-        start_dt = datetime.strptime(
-            f"{appointment_date} {start_time}", "%Y-%m-%d %H:%M"
-        )
-        end_dt = datetime.strptime(f"{appointment_date} {end_time}", "%Y-%m-%d %H:%M")
-    except ValueError:
-        return "Invalid date/time format. Use YYYY-MM-DD for date and HH:MM for time."
+    parsed_start = _parse_date_time_to_local_and_utc(appointment_date, start_time)
+    parsed_end = _parse_date_time_to_local_and_utc(appointment_date, end_time)
 
-    if start_dt >= end_dt:
+    if not parsed_start or not parsed_end:
+        return (
+            f"Invalid date/time format. Use YYYY-MM-DD for date ({appointment_date}) "
+            f"and a supported time format for start/end (received start: {start_time}, end: {end_time})."
+        )
+
+    start_local, start_utc = parsed_start
+    end_local, end_utc = parsed_end
+
+    # VALIDATION: start must be strictly before end
+    if start_utc >= end_utc:
         return "Start time must be before end time."
 
-    # 4. Check for conflicting appointments for this doctor
-    conflict = (
-        db.query(Appointment)
-        .filter(
-            Appointment.doctor_id == doctor.id,
-            Appointment.appointment_date == start_dt.date(),
-            Appointment.status == "booked",
-            # Overlapping time check
-            ((Appointment.start_time < end_dt) & (Appointment.end_time > start_dt)),
-        )
-        .first()
-    )
+    # TODO: conflict detection - ensure Appointment.start_time/end_time comparison works with UTC datetimes in DB
+    # conflict = (
+    #     db.query(Appointment)
+    #     .filter(
+    #         Appointment.doctor_id == doctor.id,
+    #         Appointment.appointment_date == start_local.date(),
+    #         Appointment.status == AppointmentStatus.booked,
+    #         ((Appointment.start_time < end_utc) & (Appointment.end_time > start_utc)),
+    #     )
+    #     .first()
+    # )
+    # if conflict:
+    #     return "This doctor already has an appointment in this time slot. Please choose another time."
 
-    if conflict:
-        return "This doctor already has an appointment in this time slot. Please choose another time."
-
-    # 5. Create new appointment
     new_appt = Appointment(
         id=uuid.uuid4(),
         doctor_id=doctor.id,
         patient_id=patient_id,
-        appointment_date=start_dt.date(),
-        start_time=start_dt,
-        end_time=end_dt,
+        appointment_date=start_local.date(),  # store local date for readability/queries
+        start_time=start_utc,  # store UTC-aware datetime
+        end_time=end_utc,
         status=AppointmentStatus.booked,
     )
 
@@ -137,18 +408,75 @@ def make_appointment(
         db.refresh(new_appt)
 
         patient = db.query(User).filter(User.id == patient_id).first()
+
+        # Format email-time strings using local timezone (readable)
+        start_str_local = start_local.strftime("%I:%M %p")
+        end_str_local = end_local.strftime("%I:%M %p")
+        date_str_local = start_local.strftime("%d %b %Y")
+
         send_appointment_confirmation_email(
             to_email=patient.email,
             patient_name=patient.full_name,
             doctor_name=doctor.full_name,
-            appointment_date=start_time.strftime("%d %b %Y"),
-            start_time=start_time.strftime("%I:%M %p"),
-            end_time=end_time.strftime("%I:%M %p"),
+            appointment_date=date_str_local,
+            start_time=start_str_local,
+            end_time=end_str_local,
         )
-        print("Email sent successfully...")
-
     except SQLAlchemyError as e:
         db.rollback()
         return f"Failed to create appointment: {str(e)}"
 
-    return f"Appointment successfully booked with Dr. {doctor.full_name} on {appointment_date} from {start_time} to {end_time}."
+    return f"Appointment successfully booked with Dr. {doctor.full_name} on {start_local.strftime('%Y-%m-%d')} from {start_local.strftime('%H:%M')} to {end_local.strftime('%H:%M')}."
+
+
+# === GOOGLE CALENDAR HELPER ===
+def book_google_calendar_event(
+    doctor_name: str,
+    start_time: str,
+    end_time: str,
+    summary: str = "Doctor Appointment",
+):
+    """
+    Book an appointment in Google Calendar.
+    start_time/end_time can be flexible strings (ISO or 'YYYY-MM-DD HH:MM', or full ISO with tz).
+    The event is created with the DEFAULT_TZ timezone.
+    """
+    # parse start and end into timezone-aware datetimes
+    parsed_s = _parse_flexible_datetime(start_time)
+    parsed_e = _parse_flexible_datetime(end_time)
+    if not parsed_s or not parsed_e:
+        return "start_time and end_time must be parseable datetimes (ISO or 'YYYY-MM-DD HH:MM')"
+
+    start_local, start_utc = parsed_s
+    end_local, end_utc = parsed_e
+
+    if start_utc >= end_utc:
+        return "Start time must be before end time"
+
+    # Use RFC3339 / ISO with offset in event body and send the event using the local timezone
+    try:
+        credentials = service_account.Credentials.from_service_account_file(
+            SERVICE_ACCOUNT_FILE, scopes=SCOPES
+        )
+        service = build("calendar", "v3", credentials=credentials)
+
+        event = {
+            "summary": summary,
+            "start": {
+                # RFC3339 with offset; use the local timezone time and include tzName field
+                "dateTime": start_local.isoformat(),
+                "timeZone": DEFAULT_TZ_NAME,
+            },
+            "end": {
+                "dateTime": end_local.isoformat(),
+                "timeZone": DEFAULT_TZ_NAME,
+            },
+        }
+        created_event = (
+            service.events()
+            .insert(calendarId=DEFAULT_CALENDAR_ID, body=event)
+            .execute()
+        )
+        return "Google Calendar appointment booked"
+    except Exception as e:
+        return f"Failed to book appointment in Google Calendar: {str(e)}"

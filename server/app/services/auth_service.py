@@ -9,7 +9,7 @@ from app.db import models
 
 SECRET_KEY = "dev-secret-key"
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60
+ACCESS_TOKEN_EXPIRE_MINUTES = 1440
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
