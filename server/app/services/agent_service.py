@@ -10,6 +10,7 @@ from langchain_core.messages import HumanMessage, AIMessage
 
 from app.mcp.registry import MCPToolRegistry
 
+
 def get_patient_instructions():
     now = datetime.now()
     c_date = now.strftime("%Y-%m-%d")
@@ -43,6 +44,84 @@ RULES:
 - If either tool fails, explain the error clearly to the user and suggest alternatives.
 """
 
+def get_doctor_instructions():
+    now = datetime.now()
+    c_date = now.strftime("%Y-%m-%d")
+    c_day = now.strftime("%A")
+    c_time = now.strftime("%H:%M")
+
+    return f"""
+You are a Smart Clinical Assistant for Doctors.
+
+IMPORTANT CONTEXT:
+Today is {c_day}, {c_date}. Current time is {c_time}.
+You are assisting the logged-in doctor only.
+
+GOAL:
+Help doctors quickly understand their schedule and patient information by generating clear summary reports from appointment data.
+
+DATA ACCESS:
+You DO NOT have direct access to the database.
+To answer schedule or patient questions, you MUST call the tool:
+- get_doctor_all_appointments_stats
+
+This tool returns all appointments for the logged-in doctor including:
+date, start time, end time, patient name, symptoms, and status.
+
+YOU must:
+- filter by date (today, tomorrow, specific date, or range)
+- count appointments or patients when asked
+- group appointments by date when helpful
+- generate human-readable summaries
+
+TYPICAL QUESTIONS YOU SHOULD HANDLE:
+- "How many appointments do I have today?"
+- "What is my schedule tomorrow?"
+- "Show me all appointments on 25 Jan"
+- "How many patients with fever do I have?"
+- "Send me today's summary"
+
+REPORTING RULES:
+1. Always fetch appointment data using the tool before answering schedule-related questions.
+2. Never guess or hallucinate appointment details.
+3. Present summaries in bullet points grouped by date.
+4. Always include:
+   - date
+   - time range
+   - patient name
+   - symptoms if available
+
+NOTIFICATIONS:
+If the doctor asks to:
+- "send"
+- "notify me"
+- "share summary"
+Then after generating the report, you MUST call the notification tool to deliver the same summary text.
+
+TONE:
+- Professional
+- Concise
+- Clinically appropriate
+
+FORMAT EXAMPLE:
+
+"Today's Schedule (22 Jan):
+• 10:00–11:00 — Rahul Sharma (fever)
+• 17:00–18:00 — Priya Verma (headache)
+Total: 2 appointments"
+
+DASHBOARD BUTTON BEHAVIOR:
+If the input seems like an automatic system trigger such as:
+- "Generate summary report"
+- "Doctor dashboard summary"
+Then generate a summary for today and tomorrow and notify the doctor.
+
+IMPORTANT:
+Never ask the doctor for IDs, formats, or technical details.
+All reasoning and filtering must be done by you after fetching appointment data.
+"""
+
+
 
 class MedicalAgent:
     def __init__(self, db, current_user):
@@ -55,21 +134,20 @@ class MedicalAgent:
         self.registry = MCPToolRegistry(db)
         self.tools: List[BaseTool] = self.registry.get_tools(current_user)
 
-        # 1. Get the string with the date already inserted
+        
         if current_user["role"].lower() == "patient":
             system_string = get_patient_instructions()
         else:
-            system_string = "You are a professional assistant for doctors. Summarize their schedule clearly."
+            system_string = get_doctor_instructions()
 
-        # 2. Build the prompt. 
-        # Since we used an f-string above, system_string is now just a plain string 
-        # with no '{current_date}' variables left inside it.
-        self.prompt = ChatPromptTemplate.from_messages([
-            ("system", system_string),
-            MessagesPlaceholder(variable_name="chat_history"),
-            ("human", "{input}"),
-            MessagesPlaceholder(variable_name="agent_scratchpad"),
-        ])
+        self.prompt = ChatPromptTemplate.from_messages(
+            [
+                ("system", system_string),
+                MessagesPlaceholder(variable_name="chat_history"),
+                ("human", "{input}"),
+                MessagesPlaceholder(variable_name="agent_scratchpad"),
+            ]
+        )
 
         agent = create_tool_calling_agent(
             llm=self.llm,
@@ -93,12 +171,9 @@ class MedicalAgent:
                 chat_history.append(AIMessage(content=msg["content"]))
 
         try:
-            # Now we only pass 'input' and 'chat_history'. 
-            # 'agent_scratchpad' is handled automatically by the agent.
-            result = await self.executor.ainvoke({
-                "input": user_input,
-                "chat_history": chat_history
-            })
+            result = await self.executor.ainvoke(
+                {"input": user_input, "chat_history": chat_history}
+            )
             return result["output"]
         except Exception as e:
             return f"Error: {str(e)}"

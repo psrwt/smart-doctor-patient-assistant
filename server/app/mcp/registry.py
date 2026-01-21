@@ -1,11 +1,15 @@
 # app/mcp/registry.py
 from sqlalchemy.orm import Session
 from langchain_core.tools import tool
-from app.mcp.tools import (
+from app.mcp.tools.patient_tools import (
     fetch_doctors_from_db,
     fetch_doctor_availability,
     make_appointment,
     book_google_calendar_event,
+)
+from app.mcp.tools.doctor_tools import (
+    get_doctor_appointments_stats,
+    send_notification,
 )
 
 
@@ -48,10 +52,23 @@ class MCPToolRegistry:
             start_time/end_time: flexible strings like '2026-01-22 15:00' or ISO '2026-01-22T15:00:00+05:30'"""
             return book_google_calendar_event(doctor_name, start_time, end_time)
 
-        # Role-based tools (agent can pick based on user role)
-        return [
-            list_doctors,
-            check_doctor_availability,
-            book_appointment_tool,
-            book_google_calendar_tool,
-        ]
+        @tool
+        def get_doctor_all_appointments_stats():
+            """Get all appointments for the logged-in doctor with formatted date & time and patient/doctor names."""
+            return get_doctor_appointments_stats(self.db, current_user["id"])
+
+        @tool
+        def send_notification_tool(message: str):
+            """Send a notification to the doctor."""
+            return send_notification(message)
+
+
+        if current_user["role"] == "doctor":
+            return [get_doctor_all_appointments_stats, send_notification_tool]
+        else:
+            return [
+                list_doctors,
+                check_doctor_availability,
+                book_appointment_tool,
+                book_google_calendar_tool,
+            ]
