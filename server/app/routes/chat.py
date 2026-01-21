@@ -8,9 +8,7 @@ from typing import List, Dict, Optional
 
 router = APIRouter(prefix="/agent/chat", tags=["Agent"])
 
-# -----------------------------
-# CHAT WITH AGENT (Existing)
-# -----------------------------
+
 class ChatRequest(BaseModel):
     message: str
     messages: List[Dict[str, str]]  # conversation history
@@ -34,9 +32,6 @@ async def chat_with_agent(
     
     return {"reply": response}
 
-# -----------------------------
-# GET DOCTOR SUMMARY (New)
-# -----------------------------
 @router.post("/get-summary")
 async def get_doctor_summary(
     date: Optional[str] = Query(None, description="Optional date for summary (YYYY-MM-DD). Defaults to today"),
@@ -55,7 +50,7 @@ async def get_doctor_summary(
     if date:
         user_input = f"Generate summary report for {date}"
     else:
-        user_input = "Generate today's summary report"
+        user_input = "Generate summary report of all future appointments"
 
     # Run agent (no conversation history needed for button)
     response = await agent.run(user_input, history=[])

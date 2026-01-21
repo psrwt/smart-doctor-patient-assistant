@@ -51,7 +51,7 @@ export default function ChatBox() {
 
   return (
     <div className="flex-1 flex flex-col p-6 overflow-hidden">
-      {/* ✅ MESSAGES */}
+      {/* MESSAGES */}
       <div className="flex-1 overflow-y-auto space-y-4 pr-2">
         {messages.map((m, i) => (
           <div
@@ -68,12 +68,12 @@ export default function ChatBox() {
 
         {loading && (
           <div className="text-sm text-gray-500 italic">
-            Assistant is typing...
+            typing...
           </div>
         )}
       </div>
 
-      {/* ✅ INPUT BAR */}
+      {/* INPUT BAR */}
       <div className="mt-4 flex items-center gap-3 bg-white/80 backdrop-blur p-3 rounded-2xl shadow-lg">
         <input
           value={input}

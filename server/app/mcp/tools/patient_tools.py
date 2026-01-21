@@ -15,7 +15,7 @@ from app.services.email_service import send_appointment_confirmation_email
 
 load_dotenv()
 
-# === CONFIG / TIMEZONE ===
+# === CONFIG ===
 SERVICE_ACCOUNT_FILE = os.getenv("GOOGLE_SERVICE_ACCOUNT_FILE")
 DEFAULT_CALENDAR_ID = os.getenv("GOOGLE_CALENDAR_ID")
 SCOPES = ["https://www.googleapis.com/auth/calendar"]
@@ -42,7 +42,9 @@ def _parse_date_time_to_local_and_utc(
     time_formats = ["%H:%M:%S", "%H:%M", "%I:%M %p", "%I %p", "%I:%M%p"]
     for fmt in time_formats:
         try:
-            naive = datetime.strptime(f"{appointment_date} {time_str}", f"%Y-%m-%d {fmt}")
+            naive = datetime.strptime(
+                f"{appointment_date} {time_str}", f"%Y-%m-%d {fmt}"
+            )
             # treat as local timezone
             local_dt = naive.replace(tzinfo=DEFAULT_TZ)
             utc_dt = local_dt.astimezone(UTC)
@@ -87,7 +89,7 @@ def _parse_flexible_datetime(value: str) -> Optional[tuple]:
     return None
 
 
-# === DATABASE HELPERS ===
+# tools -----
 def fetch_doctors_from_db(db: Session):
     rows = db.query(User.full_name).filter(User.role == UserRole.doctor).all()
     return [{"name": r.full_name} for r in rows]
@@ -133,7 +135,9 @@ def fetch_doctor_availability(db: Session, doctor_name: str):
                 "appointment_date": start_local.strftime("%Y-%m-%d"),
                 "start_time": start_local.strftime("%H:%M"),
                 "end_time": end_local.strftime("%H:%M"),
-                "status": appt.status.value if hasattr(appt.status, "value") else appt.status,
+                "status": appt.status.value
+                if hasattr(appt.status, "value")
+                else appt.status,
             }
         )
     return out
@@ -176,23 +180,8 @@ def make_appointment(
     start_local, start_utc = parsed_start
     end_local, end_utc = parsed_end
 
-    # VALIDATION: start must be strictly before end
     if start_utc >= end_utc:
         return "Start time must be before end time."
-
-    # TODO: conflict detection - ensure Appointment.start_time/end_time comparison works with UTC datetimes in DB
-    # conflict = (
-    #     db.query(Appointment)
-    #     .filter(
-    #         Appointment.doctor_id == doctor.id,
-    #         Appointment.appointment_date == start_local.date(),
-    #         Appointment.status == AppointmentStatus.booked,
-    #         ((Appointment.start_time < end_utc) & (Appointment.end_time > start_utc)),
-    #     )
-    #     .first()
-    # )
-    # if conflict:
-    #     return "This doctor already has an appointment in this time slot. Please choose another time."
 
     new_appt = Appointment(
         id=uuid.uuid4(),
@@ -231,12 +220,12 @@ def make_appointment(
     return f"Appointment successfully booked with Dr. {doctor.full_name} on {start_local.strftime('%Y-%m-%d')} from {start_local.strftime('%H:%M')} to {end_local.strftime('%H:%M')}."
 
 
-# === GOOGLE CALENDAR HELPER ===
+# === GOOGLE CALENDAR tool ===
 def book_google_calendar_event(
     doctor_name: str,
     start_time: str,
     end_time: str,
-    summary: str = "Doctor Appointment",
+    summary: str = "Appointment",
 ):
     """
     Book an appointment in Google Calendar.
@@ -263,7 +252,7 @@ def book_google_calendar_event(
         service = build("calendar", "v3", credentials=credentials)
 
         event = {
-            "summary": summary,
+            "summary": f"{summary} : {doctor_name}",
             "start": {
                 # RFC3339 with offset; use the local timezone time and include tzName field
                 "dateTime": start_local.isoformat(),

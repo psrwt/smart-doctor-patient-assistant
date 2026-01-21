@@ -29,13 +29,13 @@ export default function DoctorDashboard() {
     window.location.href = "/auth";
   };
 
-  // ✅ Get summary and display modal
+  // Get summary and display modal
   const handleGetSummary = async () => {
     setLoadingSummary(true);
     try {
       const res = await axios.post(
         `${BACKEND_URL}/agent/chat/get-summary`,
-        { input: "Generate today's summary report" },
+        { input: "Generate report of future appointments" },
         { headers: { Authorization: `Bearer ${token}` } }
       );
       setSummaryText(res.data.message || "No summary available.");
@@ -49,7 +49,7 @@ export default function DoctorDashboard() {
 
   return (
     <div className="h-screen flex bg-gradient-to-br from-emerald-50 to-cyan-100">
-      {/* ✅ SIDEBAR */}
+      {/*  SIDEBAR */}
       <aside className="w-72 bg-white/80 backdrop-blur-xl shadow-xl border-r border-white/40 flex flex-col p-6">
         <div>
           <h2 className="text-2xl font-bold text-emerald-600 mb-8">
@@ -81,7 +81,7 @@ export default function DoctorDashboard() {
         </button>
       </aside>
 
-      {/* ✅ MAIN AREA */}
+      {/*  MAIN AREA */}
       <main className="flex-1 flex flex-col">
         <header className="bg-white/80 backdrop-blur border-b border-white/40 shadow-sm px-6 py-4 flex justify-between items-center">
           <h1 className="text-lg font-semibold">AI Medical Assistant 💬</h1>
@@ -91,7 +91,7 @@ export default function DoctorDashboard() {
               disabled={loadingSummary}
               className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-xl transition shadow-md"
             >
-              {loadingSummary ? "Generating..." : "Get Today’s Summary"}
+              {loadingSummary ? "Generating..." : "Get Appointment's Summary"}
             </button>
             <span className="text-sm text-gray-500">Doctor Workspace</span>
           </div>
@@ -116,7 +116,7 @@ function SummaryModal({ summary, onClose }) {
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
       <div className="bg-white rounded-xl shadow-lg max-w-lg w-full p-6">
-        <h2 className="text-xl font-semibold mb-4">📋 Today's Summary</h2>
+        <h2 className="text-xl font-semibold mb-4">📋 Appointments Summary</h2>
         <div className="mb-4 whitespace-pre-line text-gray-700">{summary}</div>
         <button
           onClick={onClose}

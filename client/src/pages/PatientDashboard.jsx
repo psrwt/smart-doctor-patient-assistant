@@ -29,7 +29,7 @@ export default function PatientDashboard() {
 
   return (
     <div className="h-screen flex bg-gradient-to-br from-blue-50 to-indigo-100">
-      {/* ✅ SIDEBAR */}
+      {/* SIDEBAR */}
       <aside className="w-72 bg-white/80 backdrop-blur-xl shadow-xl border-r border-white/40 flex flex-col p-6">
         <div>
           <h2 className="text-2xl font-bold text-indigo-600 mb-8">
@@ -63,7 +63,7 @@ export default function PatientDashboard() {
         </button>
       </aside>
 
-      {/* ✅ CHAT SECTION */}
+      {/* CHAT SECTION */}
       <main className="flex-1 flex flex-col">
         {/* Header */}
         <header className="bg-white/80 backdrop-blur border-b border-white/40 shadow-sm px-6 py-4 text-lg font-semibold">

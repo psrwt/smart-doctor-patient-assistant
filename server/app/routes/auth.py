@@ -9,7 +9,7 @@ from app.services import auth_service
 router = APIRouter(prefix="", tags=["Auth"])
 
 
-# -------- SCHEMAS (keep near routes) --------
+# -------- SCHEMAS  --------
 
 class SignupRequest(BaseModel):
     full_name: str
