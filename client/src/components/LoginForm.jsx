@@ -20,7 +20,7 @@ export default function LoginForm() {
     try {
       setLoading(true);
 
-      const res = await axios.post(`${BACKEND_URL}/login`, {
+      const res = await axios.post(`${BACKEND_URL}/auth/login`, {
         email,
         password,
       });

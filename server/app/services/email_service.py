@@ -1,62 +1,51 @@
 import os
 import smtplib
 from email.message import EmailMessage
-from dotenv import load_dotenv
+import logging
 
-load_dotenv()
+logger = logging.getLogger(__name__)
 
+def send_appointment_email_confirmation(to_email, patient_name, doctor_name, start_at, end_at):
+   
+    subject = "📅 Appointment Confirmed - Doctor Patient Assistant"
 
-def send_appointment_confirmation_email(
-    to_email: str,
-    patient_name: str,
-    doctor_name: str,
-    appointment_date: str,
-    start_time: str,
-    end_time: str,
-):
-    subject = "Appointment Confirmed"
+    # Formatting inside the function ensures the email always looks consistent
+    date_str = start_at.strftime("%B %d, %Y")
+    time_range = f"{start_at.strftime('%I:%M %p')} - {end_at.strftime('%I:%M %p')}"
 
-    body = f"""
-Hi {patient_name},
+    body = f"""Hi {patient_name},
+Your appointment with {doctor_name} is confirmed.
 
-Your appointment with {doctor_name} has been booked successfully.
+        Details:
+        Date: {date_str}
+        Time: {time_range}
 
-Appointment Details:
-Date: {appointment_date}
-Time: {start_time} to {end_time}
+        Please arrive 10 minutes early.
+    """
 
-Please arrive 10 minutes early.
-
-Thank you,
-Smart Doctor Assistant
-"""
-
-    # ---------- DEV MODE ----------
+    # --- KEEP YOUR TEST MODE ---
     if os.getenv("EMAIL_TEST_MODE", "true").lower() == "true":
-        print("=== APPOINTMENT CONFIRMATION EMAIL (TEST MODE) ===")
-        print(f"To: {to_email}")
-        print(body)
-        print("===============================================")
-        return
+        logger.info(f"TEST MODE: Email to {to_email} suppressed. Body: {body}")
+        return True
 
-    # ---------- PROD MODE ----------
+    # --- PRODUCTION SENDING ---
     smtp_host = os.getenv("SMTP_HOST")
-    smtp_port = int(os.getenv("SMTP_PORT", "0"))
+    smtp_port = int(os.getenv("SMTP_PORT", "465"))
     smtp_user = os.getenv("SMTP_USER")
     smtp_pass = os.getenv("SMTP_PASS")
 
-    if not all([smtp_host, smtp_port, smtp_user, smtp_pass]):
-        raise RuntimeError("SMTP configuration missing in environment variables")
-
     msg = EmailMessage()
-    msg["From"] = smtp_user
+    msg["From"] = f"Smart Clinic <{smtp_user}>"
     msg["To"] = to_email
     msg["Subject"] = subject
     msg.set_content(body)
 
     try:
-        with smtplib.SMTP_SSL(smtp_host, smtp_port) as server:
+        # Added a 10-second timeout so the tool doesn't hang forever
+        with smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=10) as server:
             server.login(smtp_user, smtp_pass)
             server.send_message(msg)
+            return True
     except Exception as e:
-        print("Email sending failed:", str(e))
+        # We raise the error so 'book_appointment_atomic' knows to ROLLBACK
+        raise RuntimeError(f"SMTP Error: {str(e)}")

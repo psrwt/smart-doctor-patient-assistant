@@ -3,6 +3,8 @@ import axios from "axios";
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
 
+import { useAuth } from "../context/AuthContext";
+
 export default function ChatBox() {
   const [messages, setMessages] = useState([
     { role: "assistant", text: "Hello! How can I help you today? 😊" },
@@ -11,6 +13,8 @@ export default function ChatBox() {
   const [loading, setLoading] = useState(false);
 
   const token = localStorage.getItem("token");
+
+  const { user } = useAuth();
 
   const sendMessage = async () => {
     if (!input.trim()) return;
@@ -22,9 +26,18 @@ export default function ChatBox() {
     try {
       setLoading(true);
 
+      const historyForBackend = messages.map(m => ({
+        role: m.role === "assistant" ? "model" : "user",
+        content: m.text // Changed 'text' to 'content' to match Pydantic
+      }));
+
       const res = await axios.post(
         `${BACKEND_URL}/agent/chat`,
-        { message: input, messages: messages },
+        { 
+          message: input,
+          messages: historyForBackend,
+          user_info: user 
+        },
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -34,7 +47,7 @@ export default function ChatBox() {
 
       const botMsg = {
         role: "assistant",
-        text: res.data.reply || "No response from agent",
+        text: res.data.answer || res.data.reply || "No response",
       };
 
       setMessages((prev) => [...prev, botMsg]);
@@ -56,11 +69,10 @@ export default function ChatBox() {
         {messages.map((m, i) => (
           <div
             key={i}
-            className={`max-w-xl px-4 py-3 rounded-2xl shadow-sm text-sm leading-relaxed ${
-              m.role === "user"
+            className={`max-w-xl px-4 py-3 rounded-2xl shadow-sm text-sm leading-relaxed ${m.role === "user"
                 ? "bg-indigo-600 text-white ml-auto rounded-br-sm"
                 : "bg-white/80 backdrop-blur text-gray-900 rounded-bl-sm"
-            }`}
+              }`}
           >
             {m.text}
           </div>

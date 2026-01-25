@@ -7,10 +7,22 @@ from app.routes import chat
 
 from fastapi import APIRouter, Depends
 from app.services.dependencies import get_current_user, require_role
+from contextlib import asynccontextmanager
+from app.services.agent.mcp_client import init_mcp, shutdown_mcp
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: Connect to MCP Server
+    print("Starting up MCP Connection...")
+    await init_mcp()
+    yield
+    # Shutdown: Clean up
+    print("Shutting down MCP Connection...")
+    await shutdown_mcp()
 
-# ✅ CORS SETTINGS
+app = FastAPI(lifespan=lifespan)
+
+#  CORS SETTINGS
 origins = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",

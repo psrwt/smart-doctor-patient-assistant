@@ -1,65 +1,79 @@
-# app/services/calendar_service.py
+import os
+import logging
+from datetime import datetime
 from googleapiclient.discovery import build
 from google.oauth2 import service_account
-from datetime import datetime
-import os
+from googleapiclient.errors import HttpError
 
-# Load credentials from environment
-SERVICE_ACCOUNT_FILE = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
-CALENDAR_ID = os.getenv("GOOGLE_CALENDAR_ID")  # Default calendar ID
+logger = logging.getLogger(__name__)
+
+# Config
+SERVICE_ACCOUNT_FILE = os.getenv("GOOGLE_SERVICE_ACCOUNT_FILE")
+CALENDAR_ID = os.getenv("GOOGLE_CALENDAR_ID")
 SCOPES = ["https://www.googleapis.com/auth/calendar"]
 
-if not SERVICE_ACCOUNT_FILE:
-    raise ValueError("Missing GOOGLE_SERVICE_ACCOUNT_JSON environment variable")
-if not CALENDAR_ID:
-    raise ValueError("Missing GOOGLE_CALENDAR_ID environment variable")
+# Global variable to cache the service object
+_calendar_service = None
 
-
-def book_appointment(
-    doctor_name: str,
-    start_time: str,
-    end_time: str,
-    summary: str = "Doctor Appointment",
-):
-    """
-    Book an appointment in Google Calendar.
-
-    Args:
-        doctor_name (str): Name of the doctor (currently for logging only).
-        start_time (str): Start time in ISO 8601 format "YYYY-MM-DDTHH:MM:SS".
-        end_time (str): End time in ISO 8601 format "YYYY-MM-DDTHH:MM:SS".
-        summary (str): Event title (default "Doctor Appointment").
-
-    Returns:
-        str: Success message with Google Calendar link or error message.
-    """
-    try:
-        # Validate ISO format
-        try:
-            start_dt = datetime.fromisoformat(start_time)
-            end_dt = datetime.fromisoformat(end_time)
-        except ValueError:
-            return "start_time and end_time must be in ISO 8601 format: 'YYYY-MM-DDTHH:MM:SS'"
-
-        if start_dt >= end_dt:
-            return "Start time must be before end time"
-
-        # Authenticate with service account
-        credentials = service_account.Credentials.from_service_account_file(
+def get_calendar_service():
+    """Returns a cached Google Calendar service instance."""
+    global _calendar_service
+    if _calendar_service is None:
+        if not SERVICE_ACCOUNT_FILE or not os.path.exists(SERVICE_ACCOUNT_FILE):
+            raise RuntimeError(f"Service account file not found at: {SERVICE_ACCOUNT_FILE}")
+            
+        creds = service_account.Credentials.from_service_account_file(
             SERVICE_ACCOUNT_FILE, scopes=SCOPES
         )
-        service = build("calendar", "v3", credentials=credentials)
+        _calendar_service = build("calendar", "v3", credentials=creds)
+    return _calendar_service
 
-        # Create event
-        event = {
-            "summary": summary,
-            "start": {"dateTime": start_dt.isoformat(), "timeZone": "UTC"},
-            "end": {"dateTime": end_dt.isoformat(), "timeZone": "UTC"},
+def create_calendar_event(
+    doctor_name: str,
+    patient_name: str,
+    start_dt: datetime,
+    end_dt: datetime,
+    symptoms: str = "No symptoms provided",
+):
+    """
+    Creates a Google Calendar event. 
+    Expects timezone-aware datetime objects.
+    """
+    try:
+        service = get_calendar_service()
+
+        event_body = {
+            "summary": f"🩺 Appointment: {patient_name} x {doctor_name}",
+            "location": "Virtual / Clinic Address",
+            "description": f"Patient: {patient_name}\nSymptoms: {symptoms}",
+            "start": {
+                "dateTime": start_dt.isoformat(),
+                "timeZone": "Asia/Kolkata"
+            },
+            "end": {
+                "dateTime": end_dt.isoformat(),
+                "timeZone": "Asia/Kolkata"
+            },
+            "reminders": {
+                "useDefault": False,
+                "overrides": [
+                    {"method": "email", "minutes": 24 * 60},
+                    {"method": "popup", "minutes": 30},
+                ],
+            },
         }
 
-        created_event = service.events().insert(calendarId=CALENDAR_ID, body=event).execute()
+        event = service.events().insert(
+            calendarId=CALENDAR_ID, 
+            body=event_body
+        ).execute()
 
-        return f"Google Calendar appointment booked: {created_event.get('htmlLink')}"
+        logger.info(f"Calendar event created: {event.get('htmlLink')}")
+        return event.get('htmlLink')
 
+    except HttpError as error:
+        logger.error(f"Google Calendar API Error: {error}")
+        raise RuntimeError(f"Could not create calendar event: {error.reason}")
     except Exception as e:
-        return f"Failed to book appointment in Google Calendar: {str(e)}"
+        logger.error(f"Unexpected error in calendar service: {e}")
+        raise RuntimeError(f"Calendar service failed: {str(e)}")

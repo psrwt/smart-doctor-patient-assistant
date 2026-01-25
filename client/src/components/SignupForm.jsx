@@ -21,7 +21,7 @@ export default function SignupForm() {
         try {
             setLoading(true);
 
-            const res = await axios.post(`${BACKEND_URL}/signup`, {
+            const res = await axios.post(`${BACKEND_URL}/auth/signup`, {
                 full_name: name,
                 email,
                 password,
