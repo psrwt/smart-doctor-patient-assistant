@@ -35,10 +35,11 @@ export default function DoctorDashboard() {
     try {
       const res = await axios.post(
         `${BACKEND_URL}/agent/chat/get-summary`,
-        { input: "Generate report of future appointments" },
+        { input: "SEND NOTIFICATION: send today's schedule to slack" },
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      setSummaryText(res.data.message || "No summary available.");
+      // console.log(res.data);
+      setSummaryText(res.data["answer"] || "No summary available.");
     } catch (err) {
       console.error(err);
       setSummaryText("Failed to generate summary.");

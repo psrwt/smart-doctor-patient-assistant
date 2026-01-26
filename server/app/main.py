@@ -6,7 +6,7 @@ from app.routes import auth
 from app.routes import chat
 
 from fastapi import APIRouter, Depends
-from app.services.dependencies import get_current_user, require_role
+from app.services.dependencies import require_role
 from contextlib import asynccontextmanager
 from app.services.agent.mcp_client import init_mcp, shutdown_mcp
 

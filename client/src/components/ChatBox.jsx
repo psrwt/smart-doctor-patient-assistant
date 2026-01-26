@@ -1,9 +1,8 @@
 import { useState } from "react";
 import axios from "axios";
+import { useAuth } from "../context/AuthContext";
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
-
-import { useAuth } from "../context/AuthContext";
 
 export default function ChatBox() {
   const [messages, setMessages] = useState([
@@ -13,7 +12,6 @@ export default function ChatBox() {
   const [loading, setLoading] = useState(false);
 
   const token = localStorage.getItem("token");
-
   const { user } = useAuth();
 
   const sendMessage = async () => {
@@ -27,16 +25,16 @@ export default function ChatBox() {
       setLoading(true);
 
       const historyForBackend = messages.map(m => ({
-        role: m.role === "assistant" ? "model" : "user",
+        role: m.role,
         content: m.text // Changed 'text' to 'content' to match Pydantic
       }));
 
       const res = await axios.post(
         `${BACKEND_URL}/agent/chat`,
-        { 
+        {
           message: input,
           messages: historyForBackend,
-          user_info: user 
+          user_info: user
         },
         {
           headers: {
@@ -69,10 +67,11 @@ export default function ChatBox() {
         {messages.map((m, i) => (
           <div
             key={i}
-            className={`max-w-xl px-4 py-3 rounded-2xl shadow-sm text-sm leading-relaxed ${m.role === "user"
+            className={`max-w-xl px-4 py-3 rounded-2xl shadow-sm text-sm leading-relaxed ${
+              m.role === "user"
                 ? "bg-indigo-600 text-white ml-auto rounded-br-sm"
                 : "bg-white/80 backdrop-blur text-gray-900 rounded-bl-sm"
-              }`}
+            }`}
           >
             {m.text}
           </div>

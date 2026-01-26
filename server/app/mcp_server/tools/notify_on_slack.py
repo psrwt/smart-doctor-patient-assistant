@@ -28,6 +28,8 @@ def notify_on_slack(db: Session, doctor_id: str, report_content: str) -> dict:
 
     doctor = db.query(User).filter(User.id == doctor_id, User.role == "doctor").first()
     doctor_email = doctor.email
+    logger.info(f"Doctor email: {doctor_email}")
+    logger.info(f"Report content: {report_content}")
         
     client = WebClient(token=token)
 

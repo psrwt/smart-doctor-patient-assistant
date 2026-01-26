@@ -1,65 +1,39 @@
 import os
+import json
+from groq import Groq
 from app.services.agent.mcp_client import list_tools_from_server, call_mcp_tool
 from app.services.agent.prompts import DOCTOR_PROMPT, PATIENT_PROMPT
 from typing import List, Dict, Optional, Any
 from datetime import datetime, timezone, timedelta
-from google import genai
-from google.genai import types
 
-# Configure Gemini
-# Initialize the New SDK Client
-client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+# Initialize Groq Client
+client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+MODEL = "llama-3.3-70b-versatile"
 
-def mcp_to_gemini_tool(mcp_tool):
+def map_mcp_to_groq_tool(mcp_tool: Any) -> Dict[str, Any]:
     """
-    Converts a standard MCP tool definition into a Gemini-compatible 
-    Function Declaration.
+    Converts an MCP tool definition into the Groq/OpenAI function calling format.
     """
-    return types.Tool(
-        function_declarations=[
-            types.FunctionDeclaration(
-                name=mcp_tool.name,
-                description=mcp_tool.description,
-                parameters=mcp_tool.inputSchema
-            )
-        ]
-    )
-
-def transform_history(history: List[Dict[str, str]]):
-    """
-    Converts standard chat history (role/content) 
-    to Gemini's required format (role/parts).
-    """
-    transformed = []
-    for entry in history:
-        role = "user" if entry["role"] == "user" else "model"
-        transformed.append(
-            types.Content(
-                role=role,
-                parts=[types.Part.from_text(text=entry["content"])]
-            )
-        )
-    return transformed
+    return {
+        "type": "function",
+        "function": {
+            "name": mcp_tool.name,
+            "description": mcp_tool.description,
+            "parameters": mcp_tool.inputSchema
+        }
+    }
 
 async def run_agent_chat(
-    user_message: str, 
+    user_message: str,
     history: List[Dict[str, str]],
-    current_user: Dict[str, str],
+    current_user: Dict[str, Any],
     user_info: Optional[Dict[str, Any]]
-    ):
-    """
-    Main entry point for the chat.
-    1. Fetches tools from MCP.
-    2. Sends message to Gemini.
-    3. Handles Gemini's request to call tools.
-    """
-    
-    # 1. Identity Extraction
+):
+    # 1. Identity & Time Extraction
     user_id = current_user.get("id")
     user_role = current_user.get("role")
     user_name = user_info.get("user_name", "User") if user_info else "User"
 
-    # --- IST Time Calculation ---
     ist_tz = timezone(timedelta(hours=5, minutes=30))
     now_ist = datetime.now(ist_tz)
     current_time = now_ist.strftime("%A, %Y-%m-%d %H:%M:%S")
@@ -67,74 +41,88 @@ async def run_agent_chat(
     DOCTOR_TOOLS = ["get_doctor_appointments_by_date_range", "search_appointments_by_symptom_keyword", "send_summary_report_to_slack"]
     PATIENT_TOOLS = ["get_doctors", "find_doctor", "get_available_slots", "book_new_appointment"]
 
-    # 2. Select Role-Based Prompt and Identity Context
     if user_role == "doctor":
         base_prompt = DOCTOR_PROMPT
         identity_context = f"DOCTOR IDENTITY: ID={user_id}, Name={user_name}"
-        tools = DOCTOR_TOOLS  
+        tools_filter = DOCTOR_TOOLS  
     else:
         base_prompt = PATIENT_PROMPT
         identity_context = f"PATIENT IDENTITY: ID={user_id}, Name={user_name}"
-        tools = PATIENT_TOOLS
+        tools_filter = PATIENT_TOOLS
 
     full_system_instruction = (
         f"{base_prompt}\n\n"
         f"CURRENT_TIME_CONTEXT: The current time in IST is {current_time}.\n"
-        f"{identity_context}"
+        f"{identity_context}\n"
+        f"IMPORTANT: Your internal ID is {user_id}. Always use this when a tool requires a doctor_id or patient_id."
     )
 
-    print("full_system_instruction", full_system_instruction)
-
-    # 1. Fetch available tools from MCP Server
+    # 2. Fetch and Map Tools
     mcp_tools_raw = await list_tools_from_server()
-
-    # 2. Map all MCP tools to Gemini format
-    gemini_tools = [
-        mcp_to_gemini_tool(t) 
-        for t in mcp_tools_raw 
-        if t.name in tools
+    available_tools = [
+        map_mcp_to_groq_tool(tool)
+        for tool in mcp_tools_raw
+        if tool.name in tools_filter
     ]
 
-     
-    # 3. Initialize Model WITH tools passed in
-    config = types.GenerateContentConfig(
-        system_instruction=full_system_instruction,
-        tools=gemini_tools,
-        thinking_config=types.ThinkingConfig(include_thoughts=True, thinking_level="medium"),
-        temperature=0.1 # Lower temperature for better tool accuracy
-    )
+    # 3. Prepare Conversation History
+    messages = [{"role": "system", "content": full_system_instruction}]
+    messages.extend(history)
+    messages.append({"role": "user", "content": user_message})
 
-    gemini_history = transform_history(history)
+    # 4. LLM Interaction Loop
+    max_iterations = 5
+    response_text = ""
 
-    # In Gemini 3, we create a chat session directly from the client
-    chat = client.chats.create(
-        model="gemini-3-flash-preview",
-        config=config,
-        history=gemini_history
-    )
+    for i in range(max_iterations):
+        response = client.chat.completions.create(
+            model=MODEL,
+            messages=messages,
+            tools=available_tools if available_tools else None,
+            tool_choice="auto",
+            temperature=0.1
+        )
 
-    # 5. First call to Gemini with the user message
-    response = chat.send_message(user_message)
+        response_message = response.choices[0].message
+        tool_calls = response_message.tool_calls
 
-    # Gemini 3 might call multiple tools in one go (parallel tool use)
-    while response.function_calls:
-        tool_responses = []
-        for call in response.function_calls:
-            # Execute MCP Tool
-            result = await call_mcp_tool(call.name, call.args)
-            
-            # Create a response part for this tool
-            tool_responses.append(
-                types.Part.from_function_response(
-                    name=call.name,
-                    response={'result': result}
-                )
-            )
-        
-        # Feed all tool results back to the model
-        response = chat.send_message(tool_responses)
+        if response_message.content:
+            response_text = response_message.content
 
+        if not tool_calls:
+            break
+
+        messages.append(response_message)
+
+        for tool_call in tool_calls:
+            function_name = tool_call.function.name
+            args_str = tool_call.function.arguments or "{}"
+            function_args = json.loads(args_str)
+
+            try:
+                print(f"🛠️ Tool: {function_name}")
+                mcp_result = await call_mcp_tool(function_name, function_args)
+                
+                readable_result = "".join([
+                    c.text if hasattr(c, 'text') else str(c)
+                    for c in mcp_result
+                ])
+
+                messages.append({
+                    "tool_call_id": tool_call.id,
+                    "role": "tool",
+                    "name": function_name,
+                    "content": readable_result,
+                })
+            except Exception as e:
+                messages.append({
+                    "tool_call_id": tool_call.id,
+                    "role": "tool",
+                    "name": function_name,
+                    "content": f"Error: {str(e)}",
+                })
+
+    print("Final Response to UI:", response_text)
     return {
-        "answer": response.text,
-        # "history": [h.to_dict() for h in chat.history] 
+        "answer": response_text,
     }

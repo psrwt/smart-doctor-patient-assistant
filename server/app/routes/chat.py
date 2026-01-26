@@ -18,27 +18,40 @@ class UserContext(BaseModel):
 class ChatRequest(BaseModel):
     message: str
     messages: List[Dict[str, str]]  # History: [{"role": "user", "content": "..."}]
-    user_info: Optional[UserContext] = None  # Matches the 'user' key from React
+    user_info: Optional[UserContext] = None
+
+class SummaryRequest(BaseModel):
+    input: str
 
 @router.post("")
 async def chat_with_agent(
     payload: ChatRequest,
     current_user = Depends(get_current_user),
 ):
-    
     result = await run_agent_chat(
         user_message = payload.message,
         history = payload.messages,
         current_user = current_user,
         user_info = payload.user_info.model_dump() if payload.user_info else None
     )
-    
+
     return result
-    
-    
 
-    
-    
-    
-    
+@router.post("/get-summary")
+async def get_summary(
+    payload: SummaryRequest,
+    current_user = Depends(get_current_user),
+):
+    """
+    Takes the 'input' from frontend and passes it to the agent
+    with no history.
+    """
+    # We use payload.input which contains "Generate report of future appointments"
+    result = await run_agent_chat(
+        user_message = payload.input,
+        history = [],  # No history attribute as requested
+        current_user = current_user,
+        user_info = None 
+    )
 
+    return result
