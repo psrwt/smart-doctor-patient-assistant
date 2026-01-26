@@ -1,102 +1,130 @@
-# Smart Doctor-Patient Assistant with MCP
-=======================================
+# Smart Doctor-Patient Assistant (MCP Architecture) 🏥🤖
 
-A comprehensive web application designed to facilitate seamless interaction between doctors and patients using intelligent AI agents. This project leverages a modern tech stack with **FastAPI** for the backend and **React (Vite)** for the frontend, utilizing the **Model Context Protocol (MCP)** for advanced, agentic capabilities.
+A state-of-the-art, AI-powered healthcare orchestration system built on the **Model Context Protocol (MCP)**. This application facilitates seamless communication between patients and doctors, leveraging intelligent agents to manage appointments, clinical reports, and notifications.
+
+---
+
+## 🏗️ Modern MCP Architecture
+
+### 1. MCP Server (`server/app/mcp_server`)
+Built with **FastMCP**, the server acts as the source of truth for all "capabilities" (tools). It runs as a background process communicating over `stdio` transport.
+*   **Dynamic Tool Exposure:** All medical logic is encapsulated as MCP tools.
+*   **Database Isolation:** Only the MCP server interacts directly with the database for tool execution.
+
+### 2. MCP Client & Medical Agent (`server/app/services/agent`)
+The FastAPI backend hosts the **MCP Client** which:
+*   **Connects on Startup:** Establishes a session with the internal MCP server.
+*   **Dynamic Discovery:** The LLM (Llama 3.3 via Groq) retrieves tool definitions at runtime via MCP protocol.
+*   **Secure Execution:** The Agent never touches the DB directly; it requests tool execution from the MCP Server.
+
+---
 
 ## 🚀 Key Features
-The purpose of this application is to bridge the gap in healthcare communication through intelligent orchestration.
 
--   **Model Context Protocol (MCP)**: Implements an internal MCP server (`app/mcp/server.py`) using the `mcp` Python library. This standardizes tool exposure and discovery.
--   **Agentic AI**: The AI Agent dynamically discovers tools via MCP and orchestrates complex workflows (e.g., checking availability -> booking -> notifying).
--   **Patient Assistant**: Helps patients find doctors, check availability, and book appointments (syncs with Google Calendar).
--   **Doctor Assistant**: Assists doctors in getting schedule summaries (from DB), analyzing patient data, and receiving notifications.
+### 🩺 For Patients
+-   **Intelligent Doctor Search:** Find doctors by name or specialty.
+-   **Smart Appointment Booking:** Real-time checking of available slots and instant booking.
+-   **Calendar Integration:** Automatic synchronization with Google Calendar.
 
-## 🛠 Tech Stack
+### 🧑‍⚕️ For Doctors
+-   **Schedule Summarization:** Get daily or weekly appointment breakdowns powered by AI.
+-   **Clinical Symptom Search:** Search through patient history using keyword matching (e.g., "how many patients had fever?").
+-   **Slack Notifications:** Instantly push schedule summaries or patient reports to Slack.
 
-### Server (Backend)
--   **Framework**: FastAPI
--   **Agent Architecture**: Model Context Protocol (MCP) using `mcp` library (FastMCP)
--   **LLM Integration**: LangChain + Groq (Llama 3.3)
--   **Database**: PostgreSQL (SQLAlchemy ORM)
--   **Tools**: Google Calendar API, Email Service
+---
 
-### Client (Frontend)
--   **Framework**: React 19 + Vite
--   **Styling**: TailwindCSS
--   **Chat UI**: Interactive chat interface for Agent communication.
+## 🛠️ Tech Stack
 
-## 📂 MCP Architecture
+### Backend (Python/FastAPI)
+-   **Core:** FastAPI (High-performance web framework).
+-   **Intelligence:** Groq (Llama-3.3-70b-Versatile).
+-   **Protocol:** [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) via `mcp` & `fastmcp`.
+-   **Database:** PostgreSQL with SQLAlchemy ORM.
 
-The project follows the MCP Client-Server model strictly:
+### Frontend (React/Vite)
+-   **UI/UX:** React 19 + TailwindCSS.
+-   **Communication:** Real-time AI chat interface.
 
--   **MCP Server (`app/mcp/server.py`)**:
-    -   Host: Internal In-Process FastMCP Server.
-    -   Tools Exposed: `list_doctors`, `check_doctor_availability`, `book_appointment_tool`, `book_google_calendar_tool`, `get_doctor_all_appointments_stats`, `send_notification_tool`.
-    
--   **MCP Client (`app/services/agent_service.py`)**:
-    -   The `MedicalAgent` acts as an MCP Client.
-    -   It uses `mcp_server.list_tools()` to dynamically discover available capabilities.
-    -   It uses `mcp_server.call_tool()` to execute actions, ensuring decoupling between the agent cognitive logic and the tool implementation.
+### Integrations
+-   **Google Calendar API:** For automated appointment scheduling.
+-   **Slack API:** For doctor-side notifications.
+
+---
+
+## 📂 Project Structure
+
+```text
+smart-doctor-patient-assistant/
+├── client/                     # React Frontend (Vite)
+│   ├── src/
+│   │   ├── components/         # Reusable UI components
+│   │   │   ├── ChatBox.jsx     # Main AI chat interface
+│   │   │   ├── LoginForm.jsx   # Authentication components
+│   │   │   └── ...
+│   │   ├── pages/              # Main application views
+│   │   │   ├── Auth.jsx        # Unified Login/Signup page
+│   │   │   ├── DoctorDashboard.jsx
+│   │   │   └── PatientDashboard.jsx
+│   │   ├── context/            # Global state (AuthContext)
+│   │   └── App.jsx             # Root component & Routing
+├── server/                     # FastAPI Backend
+│   ├── app/
+│   │   ├── mcp_server/         # 🚀 MCP Server Implementation
+│   │   │   ├── tools/          # Modular Tool definitions
+│   │   │   │   ├── book_appointment.py
+│   │   │   │   ├── notify_on_slack.py
+│   │   │   │   └── ... (7+ Specialized Tools)
+│   │   │   └── server.py       # FastMCP server entry point (Stdio Transport)
+│   │   ├── services/           # Backend business logic
+│   │   │   ├── agent/          # MCP Client & LLM Orchestration
+│   │   │   │   ├── agent.py    # LangChain/Groq Agent logic
+│   │   │   │   └── mcp_client.py # MCP Protocol lifecycle
+│   │   │   ├── auth_service.py # Security & JWT management
+│   │   │   └── ...             # Calendar & Email integrations
+│   │   ├── routes/             # FastAPI HTTP endpoints (Chat, Auth)
+│   │   ├── db/                 # PostgreSQL Models & Session
+│   │   └── main.py             # FastAPI App & Lifecycle hooks
+└── ...
+```
+
+---
 
 ## ⚙️ Setup & Installation
 
-### Prerequisites
--   Node.js (v18+)
--   Python (v3.10+)
--   PostgreSQL Database running locally or cloud.
-
-### 1. Backend Setup (`server`)
-1.  Navigate to `server`:
-    ```bash
-    cd server
-    ```
-2.  Create virtual environment:
-    ```bash
-    python -m venv venv
-    venv\Scripts\activate  # Windows
-    # source venv/bin/activate # Mac/Linux
-    ```
-3.  Install dependencies (including `mcp`):
+### 1. Server Setup
+1.  Navigate to `server/` and create a virtual environment.
+2.  Install dependencies:
     ```bash
     pip install -r requirements.txt
     ```
-4.  Configure `.env` file in `server/`:
-    ```env
-    DATABASE_URL=postgresql://user:pass@localhost/dbname
-    SECRET_KEY=your_secret_key
-    GROQ_API_KEY=gsk_...
-    GOOGLE_SERVICE_ACCOUNT_FILE=path/to/service_account.json
-    GOOGLE_CALENDAR_ID=your_calendar_id
-    EMAIL_USER=your_email
-    EMAIL_PASSWORD=your_app_password
-    ```
-5.  Run the server:
+3.  Configure your `.env` with:
+    -   `DATABASE_URL`
+    -   `GROQ_API_KEY`
+    -   `GOOGLE_APPLICATION_CREDENTIALS` (JSON path)
+    -   `SLACK_BOT_TOKEN` & `SLACK_CHANNEL_ID`
+
+4.  Start the FastAPI server:
     ```bash
     uvicorn app.main:app --reload
     ```
+    *(Note: The MCP Server is automatically managed/started by the FastAPI lifecycle)*
 
-### 2. Frontend Setup (`client`)
-1.  Navigate to `client`:
+### 2. Client Setup
+1.  Navigate to `client/`.
+2.  Install & Run:
     ```bash
-    cd client
     npm install
     npm run dev
     ```
 
-## 🧩 Usage & Prompts
+---
 
-### Patient Flow
-Login as a patient and try:
--   "I want to book an appointment with Dr. Ahuja tomorrow morning."
--   "Is Dr. Smith available on Friday?" -> "Book the 3 PM slot."
+## 🛡️ Usage Scenarios
 
-### Doctor Flow
-Login as a doctor and try:
--   "How many patients do I have today?"
--   "Generate a summary report for tomorrow."
+### Patient Prompt Example:
+> *"Find Dr. Ahuja and check if he has any slots open tomorrow afternoon. If yes, book a 2 PM slot for me for my persistent cough."*
 
-## 📦 Deliverables Checklist
-- [x] MCP-compliant tool definitions (FastMCP).
-- [x] LLM-triggered tool invocation via MCP.
-- [x] Multi-turn conversation handling.
-- [x] Full-stack interop (FastAPI <-> React).
+### Doctor Prompt Example:
+> *"Give me a summary of all appointments for today and push it to my Slack."*
+> *"How many patients mentioned 'fever' in their symptoms this month?"*
+

@@ -52,7 +52,7 @@ async def get_available_slots(doctor_id: str, date_str: str) -> dict:
         return fetch_available_appointment_slots(db, doctor_id, date_str)
 
 @mcp.tool()
-async def book_new_appointment(doctor_id: str, patient_id: str, start_at: str, symptoms: str) -> dict:
+async def book_new_appointment(doctor_id: str, patient_id: str, start_at: str, symptoms: str = "not provided") -> dict:
     """
     Finalizes and books a medical appointment in the database and Google Calendar.
     Use this ONLY after the user has confirmed a specific time slot from get_available_slots.
