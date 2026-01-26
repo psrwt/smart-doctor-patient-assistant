@@ -26,7 +26,7 @@ export default function ChatBox() {
 
       const historyForBackend = messages.map(m => ({
         role: m.role,
-        content: m.text // Changed 'text' to 'content' to match Pydantic
+        content: m.text
       }));
 
       const res = await axios.post(

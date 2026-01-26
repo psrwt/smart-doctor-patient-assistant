@@ -9,7 +9,6 @@ from app.services.agent.agent import run_agent_chat
 
 router = APIRouter(prefix="/agent/chat", tags=["Agent"])
 
-# New sub-model to handle the {user} data from useAuth()
 class UserContext(BaseModel):
     user_name: Optional[str] = None
     user_email: Optional[str] = None
@@ -46,7 +45,7 @@ async def get_summary(
     Takes the 'input' from frontend and passes it to the agent
     with no history.
     """
-    # We use payload.input which contains "Generate report of future appointments"
+    
     result = await run_agent_chat(
         user_message = payload.input,
         history = [],  # No history attribute as requested

@@ -13,7 +13,7 @@ async def get_mcp_session() -> ClientSession:
     if _session is not None:
         return _session
 
-    # Ensure the sub-process knows where to find the 'app' package
+    
     env = os.environ.copy()
     env["PYTHONPATH"] = os.getcwd() 
 
