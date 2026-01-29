@@ -26,6 +26,9 @@ def get_calendar_service():
 
             # Parse the flattened JSON string from .env into a dictionary
             service_account_info = json.loads(SERVICE_ACCOUNT_JSON_STR)
+
+            if "private_key" in service_account_info:
+                service_account_info["private_key"] = service_account_info["private_key"].replace("\\n", "\n")
             
             # Use from_service_account_info instead of from_service_account_file
             creds = service_account.Credentials.from_service_account_info(
