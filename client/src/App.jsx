@@ -1,6 +1,7 @@
 import './App.css'
 import { Routes, Route, Navigate } from 'react-router-dom'
-import AuthPage from './pages/auth'
+
+import Auth from './pages/Auth'
 import ProtectedRoute from './components/ProtectedRoute'
 import DoctorDashboard from './pages/DoctorDashboard'
 import PatientDashboard from './pages/PatientDashboard'
@@ -13,7 +14,7 @@ function App() {
         <Route path="/" element={<Navigate to="/auth" />} />
 
         {/* Auth Page */}
-        <Route path="/auth" element={<AuthPage />} />
+        <Route path="/auth" element={<Auth />} />
 
         {/* Doctor Dashboard */}
         <Route

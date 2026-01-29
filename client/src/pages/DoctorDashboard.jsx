@@ -3,6 +3,7 @@ import axios from "axios";
 import { useAuth } from "../context/AuthContext";
 import ChatBox from "../components/ChatBox";
 
+
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
 
 export default function DoctorDashboard() {
