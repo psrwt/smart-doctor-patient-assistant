@@ -1,37 +1,32 @@
 import os
-from urllib.parse import quote_plus
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, DeclarativeBase
+from sqlalchemy.pool import NullPool
 from dotenv import load_dotenv
 
 load_dotenv()
 
-# credentials 
-DB_USER = os.getenv("DB_USER")
-DB_PASSWORD = quote_plus(os.getenv("DB_PASSWORD", ""))
-DB_HOST = os.getenv("DB_HOST")
-DB_PORT = os.getenv("DB_PORT", "5432")
-DB_NAME = os.getenv("DB_NAME")
+# connection string
+SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL")
 
-SQLALCHEMY_DATABASE_URL = (
-    f"postgresql+psycopg2://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-)
+if not SQLALCHEMY_DATABASE_URL:
+    raise ValueError("❌ No DATABASE_URL found in environment variables!")
 
-# 2. Enhanced Engine Configuration
+# Optimized Engine Configuration
+# We use NullPool for Vercel/Supabase to avoid "Too many connections" errors.
+is_cloud = "pooler.supabase.com" in SQLALCHEMY_DATABASE_URL or "neon.tech" in SQLALCHEMY_DATABASE_URL
+
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL,
-    echo=False,
-    pool_pre_ping=True,      # Checks if connection is alive before using it
-    pool_size=10,            # Keeps 10 connections ready
-    max_overflow=20          # Allows up to 20 extra connections during spikes
+    echo=True,
+    pool_pre_ping=True,  # Checks if the connection is still alive
+    poolclass=NullPool if is_cloud else None  # Disables local pooling for cloud
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-
 class Base(DeclarativeBase):
     pass
-
 
 def get_db():
     db = SessionLocal()

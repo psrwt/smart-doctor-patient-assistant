@@ -12,6 +12,9 @@ from app.services.agent.mcp_client import init_mcp, shutdown_mcp
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+
+    print("connecting to DB...")
+    models.Base.metadata.create_all(bind=engine)
     # Startup: Connect to MCP Server
     print("Starting up MCP Connection...")
     await init_mcp()
@@ -26,6 +29,7 @@ app = FastAPI(lifespan=lifespan)
 origins = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+    "https://smart-doctor-patient-assistant.vercel.app"
 ]
 
 app.add_middleware(

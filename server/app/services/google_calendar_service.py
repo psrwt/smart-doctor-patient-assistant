@@ -4,11 +4,12 @@ from datetime import datetime
 from googleapiclient.discovery import build
 from google.oauth2 import service_account
 from googleapiclient.errors import HttpError
+import json
 
 logger = logging.getLogger(__name__)
 
 # Config
-SERVICE_ACCOUNT_FILE = os.getenv("GOOGLE_SERVICE_ACCOUNT_FILE")
+SERVICE_ACCOUNT_JSON_STR = os.getenv("GOOGLE_SERVICE_ACCOUNT_FILE")
 CALENDAR_ID = os.getenv("GOOGLE_CALENDAR_ID")
 SCOPES = ["https://www.googleapis.com/auth/calendar"]
 
@@ -16,16 +17,29 @@ SCOPES = ["https://www.googleapis.com/auth/calendar"]
 _calendar_service = None
 
 def get_calendar_service():
-    """Returns a cached Google Calendar service instance."""
+    """Returns a cached Google Calendar service instance using service account info."""
     global _calendar_service
     if _calendar_service is None:
-        if not SERVICE_ACCOUNT_FILE or not os.path.exists(SERVICE_ACCOUNT_FILE):
-            raise RuntimeError(f"Service account file not found at: {SERVICE_ACCOUNT_FILE}")
+        try:
+            if not SERVICE_ACCOUNT_JSON_STR:
+                raise RuntimeError("GOOGLE_SERVICE_ACCOUNT_FILE environment variable is empty or not set.")
+
+            # Parse the flattened JSON string from .env into a dictionary
+            service_account_info = json.loads(SERVICE_ACCOUNT_JSON_STR)
             
-        creds = service_account.Credentials.from_service_account_file(
-            SERVICE_ACCOUNT_FILE, scopes=SCOPES
-        )
-        _calendar_service = build("calendar", "v3", credentials=creds)
+            # Use from_service_account_info instead of from_service_account_file
+            creds = service_account.Credentials.from_service_account_info(
+                service_account_info, scopes=SCOPES
+            )
+            _calendar_service = build("calendar", "v3", credentials=creds)
+            
+        except json.JSONDecodeError as je:
+            logger.error(f"Failed to parse Google Service Account JSON: {je}")
+            raise RuntimeError("Invalid JSON format in GOOGLE_SERVICE_ACCOUNT_FILE")
+        except Exception as e:
+            logger.error(f"Failed to initialize Google Calendar service: {e}")
+            raise RuntimeError(f"Calendar initialization failed: {str(e)}")
+            
     return _calendar_service
 
 def create_calendar_event(
