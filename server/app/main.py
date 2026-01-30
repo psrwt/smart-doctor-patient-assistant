@@ -10,12 +10,21 @@ from app.services.dependencies import require_role
 from contextlib import asynccontextmanager
 from app.services.agent.mcp_client import init_mcp, shutdown_mcp
 
+
+# --- Force Vercel to bundle fastmcp ---
+# We import the server module so Vercel sees the dependency chain.
+# We don't need to use it, just importing it is enough.
+try:
+    import app.mcp_server.server
+except ImportError:
+    pass
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
 
     print("connecting to DB...")
     models.Base.metadata.create_all(bind=engine)
-    # Startup: Connect to MCP Server
+    # Startup: Connect to MCP Server    
     print("Starting up MCP Connection...")
     await init_mcp()
     yield
