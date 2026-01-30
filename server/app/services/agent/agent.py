@@ -10,24 +10,31 @@ from datetime import datetime, timezone, timedelta
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 MODEL = "llama-3.3-70b-versatile"
 
+
 def map_mcp_to_groq_tool(mcp_tool: Any) -> Dict[str, Any]:
     """
-    Converts an MCP tool definition into the Groq/OpenAI function calling format.
+    Converts a FastMCP tool object into the Groq/OpenAI function calling format.
     """
+    name = getattr(mcp_tool, "name", "unknown")
+    description = getattr(mcp_tool, "description", "")
+    # FastMCP uses '.parameters' for the JSON schema
+    parameters = getattr(mcp_tool, "parameters", {"type": "object", "properties": {}})
+
     return {
         "type": "function",
         "function": {
-            "name": mcp_tool.name,
-            "description": mcp_tool.description,
-            "parameters": mcp_tool.inputSchema
-        }
+            "name": name,
+            "description": description,
+            "parameters": parameters,
+        },
     }
+
 
 async def run_agent_chat(
     user_message: str,
     history: List[Dict[str, str]],
     current_user: Dict[str, Any],
-    user_info: Optional[Dict[str, Any]]
+    user_info: Optional[Dict[str, Any]],
 ):
     # 1. Identity & Time Extraction
     user_id = current_user.get("id")
@@ -38,23 +45,26 @@ async def run_agent_chat(
     now_ist = datetime.now(ist_tz)
     current_time = now_ist.strftime("%A, %Y-%m-%d %H:%M:%S")
 
-    DOCTOR_TOOLS = ["get_doctor_appointments_by_date_range", "search_appointments_by_symptom_keyword", "send_summary_report_to_slack"]
-    PATIENT_TOOLS = ["get_doctors", "find_doctor", "get_available_slots", "book_new_appointment"]
+    DOCTOR_TOOLS = [
+        "get_doctor_appointments_by_date_range",
+        "search_appointments_by_symptom_keyword",
+        "send_summary_report_to_slack",
+    ]
+    PATIENT_TOOLS = [
+        "get_doctors",
+        "find_doctor",
+        "get_available_slots",
+        "book_new_appointment",
+    ]
 
-    if user_role == "doctor":
-        base_prompt = DOCTOR_PROMPT
-        identity_context = f"DOCTOR IDENTITY: ID={user_id}, Name={user_name}"
-        tools_filter = DOCTOR_TOOLS  
-    else:
-        base_prompt = PATIENT_PROMPT
-        identity_context = f"PATIENT IDENTITY: ID={user_id}, Name={user_name}"
-        tools_filter = PATIENT_TOOLS
+    tools_filter = DOCTOR_TOOLS if user_role == "doctor" else PATIENT_TOOLS
+    base_prompt = DOCTOR_PROMPT if user_role == "doctor" else PATIENT_PROMPT
+    identity_context = f"{user_role.upper()} IDENTITY: ID={user_id}, Name={user_name}"
 
     full_system_instruction = (
         f"{base_prompt}\n\n"
         f"CURRENT_TIME_CONTEXT: The current time in IST is {current_time}.\n"
         f"{identity_context}\n"
-        f"IMPORTANT: Your internal ID is {user_id}. Always use this when a tool requires a doctor_id or patient_id."
     )
 
     # 2. Fetch and Map Tools
@@ -75,12 +85,12 @@ async def run_agent_chat(
     response_text = ""
 
     for i in range(max_iterations):
+        tool_params = (
+            {"tools": available_tools, "tool_choice": "auto"} if available_tools else {}
+        )
+
         response = client.chat.completions.create(
-            model=MODEL,
-            messages=messages,
-            tools=available_tools if available_tools else None,
-            tool_choice="auto",
-            temperature=0.1
+            model=MODEL, messages=messages, temperature=0.1, **tool_params
         )
 
         response_message = response.choices[0].message
@@ -92,41 +102,48 @@ async def run_agent_chat(
         if not tool_calls:
             break
 
+        # Assistant message must be added to history before tool results
         messages.append(response_message)
 
         for tool_call in tool_calls:
             function_name = tool_call.function.name
             args_str = tool_call.function.arguments or "{}"
             function_args = json.loads(args_str)
+            if not isinstance(function_args, dict):
+                function_args = {}
 
             try:
                 print(f"🛠️ Tool calling: {function_name}")
                 mcp_result = await call_mcp_tool(function_name, function_args)
-                
-                # Since we're calling the function directly now, 
-                # mcp_result is likely already a dict or string.
-                if isinstance(mcp_result, (dict, list)):
-                    readable_result = json.dumps(mcp_result)
+
+                # Extract text from FastMCP result content list
+                if hasattr(mcp_result, "content"):
+                    readable_result = "".join(
+                        [
+                            c.text if hasattr(c, "text") else str(c)
+                            for c in mcp_result.content
+                        ]
+                    )
                 else:
-                    # If it's a FastMCP CallToolResult object, get the text
-                    # Otherwise, just stringify it
-                    readable_result = str(mcp_result)
+                    readable_result = json.dumps(mcp_result)
 
-                messages.append({
-                    "tool_call_id": tool_call.id,
-                    "role": "tool",
-                    "name": function_name,
-                    "content": readable_result,
-                })
+                messages.append(
+                    {
+                        "tool_call_id": tool_call.id,
+                        "role": "tool",
+                        "name": function_name,
+                        "content": readable_result,
+                    }
+                )
             except Exception as e:
-                messages.append({
-                    "tool_call_id": tool_call.id,
-                    "role": "tool",
-                    "name": function_name,
-                    "content": f"Error: {str(e)}",
-                })
+                print(f"❌ Tool Error: {e}")
+                messages.append(
+                    {
+                        "tool_call_id": tool_call.id,
+                        "role": "tool",
+                        "name": function_name,
+                        "content": f"Error: {str(e)}",
+                    }
+                )
 
-    print("Final Response to UI:", response_text)
-    return {
-        "answer": response_text,
-    }
+    return {"answer": response_text}

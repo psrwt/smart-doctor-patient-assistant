@@ -1,39 +1,71 @@
 import sys
 from typing import List, Dict, Any
-# We import the actual MCP server instance directly to call its tools
-from app.mcp_server.server import mcp 
+from app.mcp_server.server import mcp
+
 
 async def list_tools_from_server() -> List[Any]:
     """
-    Returns tools directly from the FastMCP instance registry.
-    This bypasses the need for a background subprocess on Vercel.
+    Correct way to get tools from a FastMCP instance.
     """
     try:
-        # FastMCP keeps tools in its internal manager
-        tools = []
-        for tool_name, tool_obj in mcp._tool_manager.list_tools():
-            tools.append(tool_obj)
-        return tools
-    except Exception as e:
-        sys.stderr.write(f"Error listing tools: {e}\n")
+        if hasattr(mcp, "_tool_manager"):
+            tm = mcp._tool_manager
+            if hasattr(tm, "get_tools"):
+                tools_dict = await tm.get_tools()
+                if isinstance(tools_dict, dict):
+                    return list(tools_dict.values())
+            if hasattr(tm, "_tools"):
+                return list(tm._tools.values())
+
+            if hasattr(tm, "tools"):
+                obj = tm.tools
+                return list(obj.values()) if isinstance(obj, dict) else obj
+        if hasattr(mcp, "_tools"):
+            return list(mcp._tools.values())
+
+        if hasattr(mcp, "list_tools"):
+            # Check if it's async
+            import inspect
+
+            if inspect.iscoroutinefunction(mcp.list_tools):
+                return await mcp.list_tools()
+            return mcp.list_tools()
+
         return []
+    except Exception as e:
+        sys.stderr.write(f"❌ Critical Tool Listing Error: {e}\n")
+        return []
+
 
 async def call_mcp_tool(tool_name: str, arguments: Dict[str, Any]):
     """
-    Calls the tool function directly using the FastMCP call_tool method.
+    Direct call to FastMCP tool execution.
     """
     try:
-        # This executes the function mapped to the tool name directly
-        result = await mcp.call_tool(tool_name, arguments)
-        return result
+        # FastMCP 2.x stores tools and their execution logic in _tool_manager
+        if hasattr(mcp, "_tool_manager"):
+            tm = mcp._tool_manager
+            if hasattr(tm, "call_tool"):
+                return await tm.call_tool(tool_name, arguments)
+
+        # Fallback for other versions
+        if hasattr(mcp, "call_tool"):
+            return await mcp.call_tool(tool_name, arguments)
+
+        if hasattr(mcp, "_call_tool"):
+            return await mcp._call_tool(tool_name, arguments)
+
+        raise AttributeError(f"MCP instance has no method to call tool '{tool_name}'")
     except Exception as e:
-        sys.stderr.write(f"Error calling tool {tool_name}: {e}\n")
+        sys.stderr.write(f"❌ Error calling tool {tool_name}: {e}\n")
         raise
 
+
 async def init_mcp():
-    """No subprocess to start, just a confirmation log."""
+    """Lifecycle hook for FastAPI startup"""
     print("✅ MCP Tools initialized In-Process")
 
+
 async def shutdown_mcp():
-    """No subprocess to kill."""
+    """Lifecycle hook for FastAPI shutdown"""
     print("🛑 MCP Session Closed")
