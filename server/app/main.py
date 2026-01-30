@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
 from app.db.database import engine
 from app.db import models
@@ -82,3 +83,7 @@ app.include_router(router)
 @app.get("/")
 def health():
     return {"status": "ok"}
+
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    return Response(status_code=204) # 204 means "No Content" - tells the browser to stop asking
