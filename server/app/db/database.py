@@ -18,7 +18,7 @@ is_cloud = "pooler.supabase.com" in SQLALCHEMY_DATABASE_URL or "neon.tech" in SQ
 
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL,
-    echo=True,
+    echo=False,
     pool_pre_ping=True,  # Checks if the connection is still alive
     poolclass=NullPool if is_cloud else None  # Disables local pooling for cloud
 )
