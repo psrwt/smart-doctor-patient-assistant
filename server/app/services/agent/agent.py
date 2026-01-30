@@ -100,13 +100,17 @@ async def run_agent_chat(
             function_args = json.loads(args_str)
 
             try:
-                print(f"🛠️ Tool: {function_name}")
+                print(f"🛠️ Tool calling: {function_name}")
                 mcp_result = await call_mcp_tool(function_name, function_args)
                 
-                readable_result = "".join([
-                    c.text if hasattr(c, 'text') else str(c)
-                    for c in mcp_result
-                ])
+                # Since we're calling the function directly now, 
+                # mcp_result is likely already a dict or string.
+                if isinstance(mcp_result, (dict, list)):
+                    readable_result = json.dumps(mcp_result)
+                else:
+                    # If it's a FastMCP CallToolResult object, get the text
+                    # Otherwise, just stringify it
+                    readable_result = str(mcp_result)
 
                 messages.append({
                     "tool_call_id": tool_call.id,

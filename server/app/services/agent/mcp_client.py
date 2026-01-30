@@ -1,54 +1,39 @@
-import os
 import sys
-from typing import List, Dict, Any, Optional
-from mcp import ClientSession, StdioServerParameters
-from mcp.client.stdio import stdio_client
-from contextlib import AsyncExitStack
-
-_exit_stack = AsyncExitStack()
-_session: Optional[ClientSession] = None
-
-async def get_mcp_session() -> ClientSession:
-    global _session
-    if _session is not None:
-        return _session
-
-    
-    env = os.environ.copy()
-    env["PYTHONPATH"] = os.getcwd() 
-
-    server_params = StdioServerParameters(
-        command=sys.executable,
-        args=["-m", "app.mcp_server.server"],
-        env=env # Pass the modified env
-    )
-    
-    try:
-        read, write = await _exit_stack.enter_async_context(stdio_client(server_params))
-        _session = await _exit_stack.enter_async_context(ClientSession(read, write))
-        await _session.initialize()
-        return _session
-    except Exception as e:
-        # Log this to stderr so it doesn't interfere with stdio if called elsewhere
-        sys.stderr.write(f"MCP Initialization Error: {e}\n")
-        raise
+from typing import List, Dict, Any
+# We import the actual MCP server instance directly to call its tools
+from app.mcp_server.server import mcp 
 
 async def list_tools_from_server() -> List[Any]:
-    session = await get_mcp_session()
-    response = await session.list_tools()
-    return response.tools
+    """
+    Returns tools directly from the FastMCP instance registry.
+    This bypasses the need for a background subprocess on Vercel.
+    """
+    try:
+        # FastMCP keeps tools in its internal manager
+        tools = []
+        for tool_name, tool_obj in mcp._tool_manager.list_tools():
+            tools.append(tool_obj)
+        return tools
+    except Exception as e:
+        sys.stderr.write(f"Error listing tools: {e}\n")
+        return []
 
 async def call_mcp_tool(tool_name: str, arguments: Dict[str, Any]):
-    session = await get_mcp_session()
-    result = await session.call_tool(tool_name, arguments)
-    return result.content
+    """
+    Calls the tool function directly using the FastMCP call_tool method.
+    """
+    try:
+        # This executes the function mapped to the tool name directly
+        result = await mcp.call_tool(tool_name, arguments)
+        return result
+    except Exception as e:
+        sys.stderr.write(f"Error calling tool {tool_name}: {e}\n")
+        raise
 
-# This replaces your old shutdown and ensures cleanup
 async def init_mcp():
-    await get_mcp_session()
+    """No subprocess to start, just a confirmation log."""
+    print("✅ MCP Tools initialized In-Process")
 
 async def shutdown_mcp():
-    global _session
-    await _exit_stack.aclose()
-    _session = None
+    """No subprocess to kill."""
     print("🛑 MCP Session Closed")

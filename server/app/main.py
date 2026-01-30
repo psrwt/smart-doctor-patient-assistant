@@ -11,18 +11,9 @@ from app.services.dependencies import require_role
 from contextlib import asynccontextmanager
 from app.services.agent.mcp_client import init_mcp, shutdown_mcp
 
-# =================================================================
-# 🚨 CRITICAL FIX FOR VERCEL 🚨
-# Vercel "Tree Shakes" (deletes) files that aren't imported.
-# Since we run the server as a subprocess, Vercel doesn't see it.
-# We MUST explicitly import them here so they are included in the build.
-# =================================================================
-try:
-    import fastmcp 
-    import app.mcp_server.server 
-except ImportError:
-    pass
-# =================================================================
+# Vercel needs to see these imports to bundle the files correctly
+import fastmcp 
+import app.mcp_server.server 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -30,22 +21,15 @@ async def lifespan(app: FastAPI):
     print("📦 Connecting to DB and creating tables...")
     models.Base.metadata.create_all(bind=engine)
     
-    # 2. Startup: Connect to MCP Server
-    print("🚀 Starting up MCP Connection...")
-    try:
-        await init_mcp()
-    except Exception as e:
-        # We catch this so the whole server doesn't crash if MCP fails
-        print(f"⚠️ MCP Startup Failed: {e}")
-        print("Server will continue running, but AI tools may be unavailable.")
+    # 2. Startup: Load MCP Logic
+    print("🚀 Initializing MCP Tools...")
+    await init_mcp()
     
     yield
     
-    # 3. Shutdown: Clean up
-    print("🛑 Shutting down MCP Connection...")
+    # 3. Shutdown
     await shutdown_mcp()
 
-# Initialize App with Lifespan (This replaces on_event)
 app = FastAPI(lifespan=lifespan)
 
 # CORS SETTINGS
@@ -63,7 +47,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- ROUTES ---
 app.include_router(auth.router)
 app.include_router(chat.router)
 
@@ -78,12 +61,13 @@ def doctor_dashboard(current_user=Depends(require_role(["doctor"]))):
 def patient_dashboard(current_user=Depends(require_role(["patient"]))):
     return {"msg": f"Welcome Patient {current_user['id']}"}
 
+# Move favicon here to keep it out of the 'Protected' group if desired
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    return Response(status_code=204)
+
 app.include_router(router)
 
 @app.get("/")
 def health():
     return {"status": "ok"}
-
-@app.get("/favicon.ico", include_in_schema=False)
-async def favicon():
-    return Response(status_code=204) # 204 means "No Content" - tells the browser to stop asking
