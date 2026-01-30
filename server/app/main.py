@@ -14,21 +14,26 @@ from app.services.agent.mcp_client import init_mcp, shutdown_mcp
 # --- Force Vercel to bundle fastmcp ---
 # We import the server module so Vercel sees the dependency chain.
 # We don't need to use it, just importing it is enough.
-try:
-    import app.mcp_server.server
-except ImportError:
-    pass
+import fastmcp
+import app.mcp_server.server
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-
-    print("connecting to DB...")
+    # 1. Startup: Connect to DB
+    print("📦 Connecting to DB and creating tables...")
     models.Base.metadata.create_all(bind=engine)
-    # Startup: Connect to MCP Server    
+    
+    # 2. Startup: Connect to MCP Server
     print("Starting up MCP Connection...")
-    await init_mcp()
+    try:
+        await init_mcp()
+    except Exception as e:
+        print(f"⚠️ Warning: MCP failed to start: {e}")
+        # We don't raise here so the main server can still start even if AI fails
+    
     yield
-    # Shutdown: Clean up
+    
+    # 3. Shutdown: Clean up
     print("Shutting down MCP Connection...")
     await shutdown_mcp()
 
@@ -49,10 +54,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.on_event("startup")
-def startup_db():
-    print("📦 Connecting to DB and creating tables if not exist...")
-    models.Base.metadata.create_all(bind=engine)
+# @app.on_event("startup")
+# def startup_db():
+#     print("📦 Connecting to DB and creating tables if not exist...")
+#     models.Base.metadata.create_all(bind=engine)
 
 app.include_router(auth.router)
 app.include_router(chat.router)
