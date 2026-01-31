@@ -15,9 +15,10 @@ export default function ChatBox() {
   const { user } = useAuth();
 
   const sendMessage = async () => {
-    if (!input.trim()) return;
+    const trimmedInput = input.trim();
+    if (!trimmedInput) return;
 
-    const userMsg = { role: "user", text: input };
+    const userMsg = { role: "user", text: trimmedInput };
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
 
@@ -29,10 +30,13 @@ export default function ChatBox() {
         content: m.text
       }));
 
+      console.log("current msg", trimmedInput)
+      console.log("history:", historyForBackend)
+
       const res = await axios.post(
         `${BACKEND_URL}/agent/chat`,
         {
-          message: input,
+          message: trimmedInput,
           messages: historyForBackend,
           user_info: user
         },

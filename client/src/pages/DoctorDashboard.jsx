@@ -19,6 +19,10 @@ export default function DoctorDashboard() {
           headers: { Authorization: `Bearer ${token}` },
         });
       } catch (err) {
+        if (err.response.status === 403) {
+          logout();
+          window.location.href = "/auth";
+        }
         console.error(err);
       }
     };

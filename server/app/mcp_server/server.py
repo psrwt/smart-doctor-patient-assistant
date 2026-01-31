@@ -102,11 +102,3 @@ async def send_summary_report_to_slack(doctor_id: str, content: str) -> dict:
     with SessionLocal() as db:
         return notify_on_slack(db, doctor_id, content)
 
-
-
-
-
-
-if __name__ == "__main__":
-    mcp.run(transport="stdio")
-    
